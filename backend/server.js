@@ -113,6 +113,37 @@ function checkMatch(actual, expected, matchType) {
   return a === e;
 }
 
+const SAFE_ALIASES = {
+  k: 'kubectl', kg: 'kubectl get', kgp: 'kubectl get pods',
+  kga: 'kubectl get pods --all-namespaces', kgd: 'kubectl get deployments',
+  kgs: 'kubectl get services', kgn: 'kubectl get nodes',
+  kgns: 'kubectl get namespaces', kd: 'kubectl describe',
+  kdp: 'kubectl describe pod', kex: 'kubectl exec -it',
+  klogs: 'kubectl logs', kaf: 'kubectl apply -f',
+  kdf: 'kubectl delete -f', krm: 'kubectl delete',
+};
+
+function expandAliases(cmd) {
+  const trimmed = cmd.trim();
+  const firstWord = trimmed.split(/\s+/)[0];
+  if (SAFE_ALIASES[firstWord]) {
+    return SAFE_ALIASES[firstWord] + trimmed.slice(firstWord.length);
+  }
+  return trimmed;
+}
+
+function sanitizeUserCommand(cmd) {
+  if (typeof cmd !== 'string' || cmd.trim().length === 0 || cmd.length > 500) return null;
+  const expanded = expandAliases(cmd);
+  if (!/\bkubectl\b/.test(expanded)) return null;
+  const blocked = /\b(rm\s+-rf|rm\s+--no-preserve-root|dd\s+if=|mkfs\b|reboot\b|shutdown\b|kill\s+-9|>\s*\/dev\/)/i;
+  if (blocked.test(expanded)) return null;
+  if (/;\s*rm\b|&&\s*rm\b|\|\s*rm\b/i.test(expanded)) return null;
+  if (/`[^`]*\b(rm|dd|mkfs|reboot|shutdown)\b/i.test(expanded)) return null;
+  if (/\$\([^)]*\b(rm|dd|mkfs|reboot|shutdown)\b/i.test(expanded)) return null;
+  return expanded;
+}
+
 // Active WebSocket terminal clients — write output directly (NOT as shell input)
 const activeWsClients = new Set()
 // Active PTY shells — used only to write '\r' and trigger PS1 prompt repaint
@@ -364,28 +395,51 @@ app.post('/api/scenarios/:id/validate', (req, res) => {
   if (!scenario) return res.status(404).json({ error: 'Scenario not found' });
   if (scenario.type !== 'task') return res.status(400).json({ error: 'Not a task scenario' });
 
+  const mode = scenario.validation?.mode || 'cluster_state';
   const checks = [];
   let allPassed = true;
 
-  for (const check of (scenario.validation?.commands || [])) {
-    const result = runCommand(check.command, 5000);
-    // Prefer stdout. Only fall back to stderr for non-API errors:
-    // - kubectl auth can-i prints "yes"/"no" to stdout → already in result.output.
-    // - kubectl get <missing-resource> prints "Error from server (NotFound):" to stderr
-    //   and nothing to stdout → suppress, return '' so the check fails cleanly.
+  if (mode === 'command_submission') {
+    // User submits their command — backend runs it and checks the output
+    const userCmd = sanitizeUserCommand(req.body.command);
+    if (!userCmd) {
+      return res.status(400).json({ error: 'Invalid or disallowed command. Must be a kubectl command.' });
+    }
+    const ref = (scenario.validation?.commands || [])[0];
+    if (!ref) return res.status(500).json({ error: 'No validation reference defined' });
+
+    const result = runCommand(userCmd, 5000);
     const isKubectlApiError = result.error &&
       /^Error from server|^error:|^Error:/i.test(result.error.trim());
     const actual = result.output || (isKubectlApiError ? '' : result.error) || '';
-    const passed = checkMatch(actual, check.expected_output, check.match);
+    const passed = checkMatch(actual, ref.expected_output, ref.match);
 
     checks.push({
-      description: check.description,
-      command: check.command,
-      expected: check.expected_output,
+      description: ref.description,
+      command: userCmd,
+      expected: ref.expected_output,
       actual,
       passed
     });
     if (!passed) allPassed = false;
+  } else {
+    // Default cluster_state mode — backend runs validation commands against the cluster
+    for (const check of (scenario.validation?.commands || [])) {
+      const result = runCommand(check.command, 5000);
+      const isKubectlApiError = result.error &&
+        /^Error from server|^error:|^Error:/i.test(result.error.trim());
+      const actual = result.output || (isKubectlApiError ? '' : result.error) || '';
+      const passed = checkMatch(actual, check.expected_output, check.match);
+
+      checks.push({
+        description: check.description,
+        command: check.command,
+        expected: check.expected_output,
+        actual,
+        passed
+      });
+      if (!passed) allPassed = false;
+    }
   }
 
   // Update progress

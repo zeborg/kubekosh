@@ -97,6 +97,7 @@ Requires the user to run shell commands in the interactive terminal. The system 
 {
   "type": "task",
   "validation": {
+    "mode": "cluster_state",          // optional — "cluster_state" (default) | "command_submission"
     "description": "Check that deployment has been correctly configured",
     "commands": [
       {
@@ -109,6 +110,14 @@ Requires the user to run shell commands in the interactive terminal. The system 
   }
 }
 ```
+
+#### Validation Modes
+| Mode | Behaviour |
+| :--- | :--- |
+| `cluster_state` | **Default.** The backend runs the `command` fields in `validation.commands` against the live cluster and checks the output. |
+| `command_submission` | The user must type the kubectl command in a text input. The backend runs the user's command and checks its output against `expected_output` from the first `commands` entry. Used for observation/query tasks where the validation command would otherwise be the answer itself. |
+
+When `mode` is omitted, `"cluster_state"` is assumed for backwards compatibility.
 
 #### Match Modes
 | Mode | Behaviour |

@@ -512,5 +512,65 @@
   color: var(--amber);
 }
 
+/* Command submission mode */
+.cmdSubmitSection {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.cmdInputRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 6px 10px;
+}
+
+.cmdPrompt {
+  color: var(--green);
+  font-family: var(--mono);
+  font-weight: 700;
+  font-size: 14px;
+  user-select: none;
+}
+
+.cmdInput {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--text-1);
+  font-family: var(--mono);
+  font-size: 13px;
+  padding: 4px 0;
+}
+
+.cmdInput::placeholder {
+  color: var(--text-3);
+  opacity: 0.6;
+}
+
+.cmdInput:disabled {
+  opacity: 0.5;
+}
+
+.expectedOutput {
+  font-size: 12px;
+  color: var(--text-3);
+  padding-left: 2px;
+}
+
+.expectedOutput code {
+  font-family: var(--mono);
+  background: var(--surface3);
+  padding: 1px 5px;
+  border-radius: 3px;
+  color: var(--text-2);
+  font-size: 12px;
+}
+
 @keyframes fadeIn { from{opacity:0;transform:translateY(4px)} to{opacity:1;transform:none} }
 @keyframes spin { to{transform:rotate(360deg)} }

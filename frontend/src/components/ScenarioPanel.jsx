@@ -34,6 +34,7 @@ export default function ScenarioPanel({ scenario, onProgressUpdate, onScenarioSt
   const [submitting, setSubmitting] = useState(false)
   const [hintsRevealed, setHintsRevealed] = useState([])
   const [copiedCmd, setCopiedCmd] = useState(null)
+  const [userCommand, setUserCommand] = useState('')
 
   // Reset state when scenario changes
   useEffect(() => {
@@ -43,6 +44,7 @@ export default function ScenarioPanel({ scenario, onProgressUpdate, onScenarioSt
     setSelectedOption(null)
     setMcqResult(null)
     setHintsRevealed([])
+    setUserCommand('')
     if (scenario?.progress?.status === 'completed') {
       setSetupState('done')
     }
@@ -61,13 +63,22 @@ export default function ScenarioPanel({ scenario, onProgressUpdate, onScenarioSt
     }
   }
 
-  async function validate() {
+  async function validate(cmdOverride) {
     setValidating(true)
     setValidResult(null)
     try {
-      const r = await fetch(`/api/scenarios/${scenario.id}/validate`, { method: 'POST' })
+      const isCmdMode = scenario.validation?.mode === 'command_submission'
+      const body = isCmdMode ? JSON.stringify({ command: cmdOverride || userCommand }) : undefined
+      const headers = isCmdMode ? { 'Content-Type': 'application/json' } : undefined
+      const r = await fetch(`/api/scenarios/${scenario.id}/validate`, {
+        method: 'POST', headers, body
+      })
       const d = await r.json()
-      setValidResult(d)
+      if (!r.ok) {
+        setValidResult({ error: true, message: d.error || 'Validation failed' })
+      } else {
+        setValidResult(d)
+      }
       onProgressUpdate()
     } catch {
       setValidResult({ error: true })
@@ -326,20 +337,58 @@ export default function ScenarioPanel({ scenario, onProgressUpdate, onScenarioSt
         {/* VALIDATE TAB */}
         {tab === 'validate' && scenario.type === 'task' && (
           <div className={styles.tabPane} style={{ animation: 'fadeIn 0.2s ease' }}>
-            <div className={styles.validateHeader}>
-              <div className={styles.validateDesc}>
-                {scenario.validation?.description}
+            {scenario.validation?.mode === 'command_submission' ? (
+              /* Command submission mode */
+              <div className={styles.cmdSubmitSection}>
+                <div className={styles.validateDesc}>
+                  {scenario.validation?.description}
+                </div>
+                <div className={styles.cmdInputRow}>
+                  <span className={styles.cmdPrompt}>$</span>
+                  <input
+                    type="text"
+                    className={styles.cmdInput}
+                    placeholder="Enter your kubectl command..."
+                    value={userCommand}
+                    onChange={e => setUserCommand(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter' && userCommand.trim() && !validating) validate()
+                    }}
+                    disabled={validating}
+                    spellCheck={false}
+                    autoComplete="off"
+                  />
+                </div>
+                <div className={styles.expectedOutput}>
+                  Expected output: <code>{scenario.validation?.commands?.[0]?.expected_output}</code>
+                </div>
+                <button
+                  className={styles.validateBtn}
+                  onClick={() => validate()}
+                  disabled={validating || !userCommand.trim()}
+                >
+                  {validating
+                    ? <><span className={styles.spinner} /> Running command…</>
+                    : '▶ Run Command'}
+                </button>
               </div>
-              <button
-                className={styles.validateBtn}
-                onClick={validate}
-                disabled={validating}
-              >
-                {validating
-                  ? <><span className={styles.spinner} /> Running checks…</>
-                  : '▶ Run Validation'}
-              </button>
-            </div>
+            ) : (
+              /* Default cluster_state mode */
+              <div className={styles.validateHeader}>
+                <div className={styles.validateDesc}>
+                  {scenario.validation?.description}
+                </div>
+                <button
+                  className={styles.validateBtn}
+                  onClick={() => validate()}
+                  disabled={validating}
+                >
+                  {validating
+                    ? <><span className={styles.spinner} /> Running checks…</>
+                    : '▶ Run Validation'}
+                </button>
+              </div>
+            )}
 
             {validResult && !validResult.error && (
               <div className={styles.checks}>
@@ -366,7 +415,9 @@ export default function ScenarioPanel({ scenario, onProgressUpdate, onScenarioSt
               </div>
             )}
             {validResult?.error && (
-              <div className={styles.validateError}>⚠ Validation failed to run. Is the cluster reachable?</div>
+              <div className={styles.validateError}>
+                ⚠ {validResult.message || 'Validation failed to run. Is the cluster reachable?'}
+              </div>
             )}
           </div>
         )}

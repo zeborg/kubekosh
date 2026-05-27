@@ -2369,6 +2369,8 @@
       }
     ],
     "validation": {
+      "mode": "command_submission",
+      "description": "Enter the kubectl command to check the pod logs for the error message.",
       "commands": [
         {
           "description": "Pod log-generator emits ERROR: Database connection failed",
@@ -2446,6 +2448,8 @@
       }
     ],
     "validation": {
+      "mode": "command_submission",
+      "description": "Enter the kubectl command with a JSONPath expression to extract the container image name.",
       "commands": [
         {
           "description": "kubectl jsonpath returns the correct image",
