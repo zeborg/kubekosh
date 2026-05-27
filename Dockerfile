@@ -55,6 +55,7 @@ RUN cd frontend && npm run build
 COPY backend/  ./backend/
 COPY scenarios/ ./scenarios/
 COPY scripts/entrypoint.sh /entrypoint.sh
+COPY scripts/.bashrc_kubekosh /app/scripts/.bashrc_kubekosh
 COPY scripts/nginx.conf /etc/nginx/nginx.conf
 
 # Strip any Windows-style \r from the entrypoint so heredocs inside it

@@ -113,43 +113,11 @@ done
 # ── 4. Shell environment ─────────────────────────────────────────────────────
 LOG "Configuring shell environment..."
 
-cat >> /root/.bashrc << 'BASHRC'
+cp /app/scripts/.bashrc_kubekosh /root/.bashrc
 
-# KubeKosh aliases
-export KUBECONFIG=/root/.kube/config
-alias k='kubectl'
-alias kgp='kubectl get pods'
-alias kga='kubectl get pods --all-namespaces'
-alias kgd='kubectl get deployments'
-alias kgs='kubectl get services'
-alias kgn='kubectl get nodes'
-alias kgns='kubectl get namespaces'
-alias kdp='kubectl describe pod'
-alias kaf='kubectl apply -f'
-alias kdf='kubectl delete -f'
-alias kg='kubectl get'
-alias kd='kubectl describe'
-alias krm='kubectl delete'
-alias kex='kubectl exec -it'
-alias klogs='kubectl logs'
-
-# Useful functions
-kns() { kubectl config set-context --current --namespace="$1"; }
-kctx() { kubectl config use-context "$1"; }
-
-source <(kubectl completion bash) 2>/dev/null || true
-complete -F __start_kubectl k 2>/dev/null || true
-
-PS1='\[\033[01;32m\]\u@k8s-lab\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]\$ '
-
-echo ""
-echo "  ⎈ KubeKosh - Node: k8s-lab"
-KUBECTL_VER=$(kubectl version --client 2>/dev/null | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+[^ ]*' | head -1)
-echo "    kubectl ${KUBECTL_VER}"
-echo "    Aliases: k=kubectl, kgp=get pods, kaf=apply -f, kns=set-namespace, kgns=get namespaces, kex=kubectl exec -it"
-echo "             kgd=get deployments, kgn=get nodes, kgs=get services, kdp=describe pod, krm=kubectl delete, klogs=kubectl logs"
-echo ""
-BASHRC
+# Suppress extdebug's bashdb warning — create a dummy include so bash stops looking
+mkdir -p /usr/share/bashdb
+printf '# dummy\n' > /usr/share/bashdb/bashdb-main.inc
 
 OK "Shell configured"
 
