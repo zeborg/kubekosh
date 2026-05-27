@@ -18,7 +18,8 @@ KUBEKOSH_ALLOWED="\
   curl wget nslookup dig ping nc \
   ps top jobs bg fg wait kill \
   base64 openssl xargs \
-  k3s crictl ctr helm kustomize"
+  k3s crictl ctr helm kustomize \
+  kubeadm etcdctl"
 
 # ── Environment ─────────────────────────────────────────────────────
 export KUBECONFIG=/root/.kube/config

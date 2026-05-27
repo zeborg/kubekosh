@@ -292,6 +292,9 @@ app.post('/api/scenarios/:id/context', (req, res) => {
     `\x1b[2m   Namespace: \x1b[0m\x1b[33m${ns}\x1b[0m`,
     `  \x1b[2mDifficulty: \x1b[0m${scenario.difficulty === 'Easy' ? '\x1b[32m' : scenario.difficulty === 'Hard' ? '\x1b[31m' : '\x1b[33m'}${scenario.difficulty}\x1b[0m\r\n`,
     `\x1b[2m# ${line}\x1b[0m\r\n`,
+    `\x1b[2m  Aliases: k=kubectl  kgp=get pods  kgd=get deployments  kgs=get services\x1b[0m\r\n`,
+    `\x1b[2m           kgn=get nodes  kgns=get ns  kd=describe  klogs=logs  kaf=apply -f\x1b[0m\r\n`,
+    `\x1b[2m           krm=delete  kex=exec -it  kns=set-namespace  kg=get  kdp=describe pod\x1b[0m\r\n`,
   ].join('');
 
   // Set kubectl context namespace silently
