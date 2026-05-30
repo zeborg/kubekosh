@@ -14,7 +14,7 @@ RUN apt-get update && apt-get install -y \
     iproute2 iptables iputils-ping \
     procps htop \
     mount kmod \
-    python3 make g++ \
+    python3 python3-yaml make g++ \
     && rm -rf /var/lib/apt/lists/*
 
 # ── Node.js 20 ────────────────────────────────────────────────────────────────

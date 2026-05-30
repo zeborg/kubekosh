@@ -3494,5 +3494,533 @@
     "setup_commands": [],
     "default_namespace": "default",
     "teardown_commands": []
+  },
+  {
+    "id": "cks-runtime-class",
+    "title": "RuntimeClass for Sandboxed Workloads",
+    "category": "System Hardening",
+    "difficulty": "Medium",
+    "type": "task",
+    "weight": 5,
+    "description": "## RuntimeClass for Stronger Workload Isolation\n\nKubernetes `RuntimeClass` lets you select an alternative container runtime (such as gVisor's `runsc`) for specific pods, providing stronger kernel-level isolation than the default `runc`.\n\n**Your task:**\n\n1. Create a `RuntimeClass` named `gvisor` with `handler: runsc`.\n2. Create a Pod named `sandbox-pod` using the `nginx:alpine` image that references this RuntimeClass via `spec.runtimeClassName: gvisor`.\n\n```bash\n# Verify the RuntimeClass:\nkubectl get runtimeclass gvisor\n# Verify the pod spec:\nkubectl get pod sandbox-pod -o jsonpath='{.spec.runtimeClassName}'\n```\n\n> **Note:** The pod may not reach `Running` state if `runsc` is not installed on the node — that is expected in this lab. Validation only checks the API object configuration.",
+    "hints": [
+      {
+        "title": "Create the RuntimeClass",
+        "body": "Use a manifest with `apiVersion: node.k8s.io/v1`, `kind: RuntimeClass`, and a `handler` field.",
+        "command": "cat <<EOF | kubectl apply -f -\napiVersion: node.k8s.io/v1\nkind: RuntimeClass\nmetadata:\n  name: gvisor\nhandler: runsc\nEOF"
+      },
+      {
+        "title": "Reference the RuntimeClass in a Pod",
+        "body": "Set `spec.runtimeClassName: gvisor` in the pod spec.",
+        "command": "cat <<EOF | kubectl apply -f -\napiVersion: v1\nkind: Pod\nmetadata:\n  name: sandbox-pod\nspec:\n  runtimeClassName: gvisor\n  containers:\n  - name: app\n    image: nginx:alpine\nEOF"
+      }
+    ],
+    "setup_commands": [],
+    "validation": {
+      "commands": [
+        {
+          "description": "RuntimeClass 'gvisor' exists with handler runsc",
+          "command": "kubectl get runtimeclass gvisor -o jsonpath='{.handler}'",
+          "expected_output": "runsc",
+          "match": "exact"
+        },
+        {
+          "description": "Pod 'sandbox-pod' references RuntimeClass gvisor",
+          "command": "kubectl get pod sandbox-pod -o jsonpath='{.spec.runtimeClassName}'",
+          "expected_output": "gvisor",
+          "match": "exact"
+        }
+      ]
+    },
+    "default_namespace": "default",
+    "teardown_commands": [
+      {
+        "command": "kubectl delete pod sandbox-pod --ignore-not-found --grace-period=0 --force"
+      },
+      {
+        "command": "kubectl delete runtimeclass gvisor --ignore-not-found"
+      }
+    ]
+  },
+  {
+    "id": "cks-audit-policy",
+    "title": "Write a Kubernetes Audit Policy",
+    "category": "Cluster Setup",
+    "difficulty": "Hard",
+    "type": "task",
+    "weight": 7,
+    "description": "## Kubernetes Audit Policy\n\nAudit logging lets you track who did what on the cluster. The kube-apiserver reads an **audit policy file** to decide which events to log and at which verbosity level.\n\n**Your task:**\n\nWrite an audit policy file at `/etc/kubernetes/audit-policy.yaml` with the following rules (in order):\n\n1. Log all operations on `secrets` in any namespace at level **`RequestResponse`**.\n2. Log read operations (`get`, `list`, `watch`) on `pods` at level **`Metadata`**.\n3. **Drop** (level `None`) all events for the `system:masters` group.\n4. Log everything else at level **`Metadata`** as a catch-all.\n\n```bash\n# Verify the policy file exists and contains the key fields:\ncat /etc/kubernetes/audit-policy.yaml\n```",
+    "hints": [
+      {
+        "title": "Audit policy structure",
+        "body": "An audit policy is a YAML file with `apiVersion: audit.k8s.io/v1`, `kind: Policy`, and a `rules:` list. Order matters — first matching rule wins.",
+        "command": "cat <<EOF > /etc/kubernetes/audit-policy.yaml\napiVersion: audit.k8s.io/v1\nkind: Policy\nrules:\n- level: RequestResponse\n  resources:\n  - group: \"\"\n    resources: [\"secrets\"]\n- level: Metadata\n  verbs: [\"get\", \"list\", \"watch\"]\n  resources:\n  - group: \"\"\n    resources: [\"pods\"]\n- level: None\n  userGroups: [\"system:masters\"]\n- level: Metadata\nEOF"
+      }
+    ],
+    "setup_commands": [
+      {
+        "command": "mkdir -p /etc/kubernetes"
+      }
+    ],
+    "validation": {
+      "commands": [
+        {
+          "description": "Audit policy file is valid YAML with kind: Policy",
+          "command": "python3 -c \"import yaml; p=yaml.safe_load(open('/etc/kubernetes/audit-policy.yaml')); print(p.get('kind',''))\"",
+          "expected_output": "Policy",
+          "match": "exact"
+        },
+        {
+          "description": "Rule 1: level is RequestResponse and targets secrets",
+          "command": "python3 -c \"import yaml; p=yaml.safe_load(open('/etc/kubernetes/audit-policy.yaml')); r=p['rules'][0]; print('ok' if r['level']=='RequestResponse' and any('secrets' in x.get('resources',[]) for x in r.get('resources',[])) else 'fail')\"",
+          "expected_output": "ok",
+          "match": "exact"
+        },
+        {
+          "description": "Rule 2: level is Metadata, targets pods, verbs include get/list/watch",
+          "command": "python3 -c \"import yaml; p=yaml.safe_load(open('/etc/kubernetes/audit-policy.yaml')); print('ok' if any(r.get('level')=='Metadata' and any('pods' in x.get('resources',[]) for x in r.get('resources',[])) and set(r.get('verbs',[])) >= {'get','list','watch'} for r in p['rules']) else 'fail')\"",
+          "expected_output": "ok",
+          "match": "exact"
+        },
+        {
+          "description": "Rule 3: level is None for system:masters group",
+          "command": "python3 -c \"import yaml; p=yaml.safe_load(open('/etc/kubernetes/audit-policy.yaml')); print('ok' if any(r.get('level')=='None' and 'system:masters' in r.get('userGroups',[]) for r in p['rules']) else 'fail')\"",
+          "expected_output": "ok",
+          "match": "exact"
+        },
+        {
+          "description": "Rule 4: catch-all is level Metadata with no other selectors",
+          "command": "python3 -c \"import yaml; p=yaml.safe_load(open('/etc/kubernetes/audit-policy.yaml')); last=p['rules'][-1]; print('ok' if set(last.keys())=={'level'} and last['level']=='Metadata' else 'fail')\"",
+          "expected_output": "ok",
+          "match": "exact"
+        }
+      ]
+    },
+    "default_namespace": "default",
+    "teardown_commands": [
+      {
+        "command": "rm -f /etc/kubernetes/audit-policy.yaml"
+      }
+    ]
+  },
+  {
+    "id": "cks-egress-namespace",
+    "title": "Restrict Egress to Namespace",
+    "category": "Network Security",
+    "difficulty": "Hard",
+    "type": "task",
+    "weight": 6,
+    "description": "## Namespace-Scoped Egress Network Policy\n\nFine-grained network policies can restrict pod traffic so that only pods within a specific namespace can communicate with each other.\n\n**Your task:**\n\nA namespace `frontend` and a namespace `backend` already exist. Create a NetworkPolicy named `allow-backend-only` in the `frontend` namespace that:\n\n- Applies to **all pods** in the `frontend` namespace\n- **Allows egress only** to pods in the `backend` namespace (matched by `namespaceSelector`)\n- **Denies all other egress** traffic\n\n```bash\n# Verify:\nkubectl get networkpolicy allow-backend-only -n frontend\n```",
+    "hints": [
+      {
+        "title": "namespaceSelector in Egress rule",
+        "body": "Use `spec.policyTypes: [Egress]` with an empty egress rule except for a `namespaceSelector` that matches the `backend` namespace label.",
+        "command": "cat <<EOF | kubectl apply -f -\napiVersion: networking.k8s.io/v1\nkind: NetworkPolicy\nmetadata:\n  name: allow-backend-only\n  namespace: frontend\nspec:\n  podSelector: {}\n  policyTypes:\n  - Egress\n  egress:\n  - to:\n    - namespaceSelector:\n        matchLabels:\n          kubernetes.io/metadata.name: backend\nEOF"
+      }
+    ],
+    "setup_commands": [
+      {
+        "command": "kubectl create namespace frontend --dry-run=client -o yaml | kubectl apply -f -"
+      },
+      {
+        "command": "kubectl create namespace backend --dry-run=client -o yaml | kubectl apply -f -"
+      }
+    ],
+    "validation": {
+      "commands": [
+        {
+          "description": "NetworkPolicy 'allow-backend-only' exists in frontend namespace",
+          "command": "kubectl get networkpolicy allow-backend-only -n frontend -o jsonpath='{.metadata.name}'",
+          "expected_output": "allow-backend-only",
+          "match": "exact"
+        },
+        {
+          "description": "Policy type is Egress only",
+          "command": "kubectl get networkpolicy allow-backend-only -n frontend -o jsonpath='{.spec.policyTypes[0]}'",
+          "expected_output": "Egress",
+          "match": "exact"
+        },
+        {
+          "description": "Policy uses namespaceSelector targeting backend namespace",
+          "command": "kubectl get networkpolicy allow-backend-only -n frontend -o jsonpath='{.spec.egress[0].to[0].namespaceSelector.matchLabels.kubernetes\\.io/metadata\\.name}'",
+          "expected_output": "backend",
+          "match": "exact"
+        }
+      ]
+    },
+    "default_namespace": "frontend",
+    "teardown_commands": [
+      {
+        "command": "kubectl delete networkpolicy allow-backend-only -n frontend --ignore-not-found"
+      },
+      {
+        "command": "kubectl delete namespace frontend --ignore-not-found --wait=false"
+      },
+      {
+        "command": "kubectl delete namespace backend --ignore-not-found --wait=false"
+      }
+    ]
+  },
+  {
+    "id": "cks-non-root-enforce",
+    "title": "Enforce Non-Root Container",
+    "category": "Workload Security",
+    "difficulty": "Medium",
+    "type": "task",
+    "weight": 5,
+    "description": "## Enforce Non-Root Execution\n\nRunning containers as root is one of the most common security misconfigurations. Kubernetes provides `runAsNonRoot` and `runAsUser` to enforce this at the pod level.\n\n**Your task:**\n\nCreate a Pod named `nonroot-pod` in the `default` namespace using the `busybox:1.36` image (command: `sleep 3600`) with the following security configuration:\n\n- Pod-level `securityContext`:\n  - `runAsNonRoot: true`\n  - `runAsUser: 10001`\n  - `runAsGroup: 10001`\n- Container-level `securityContext`:\n  - `allowPrivilegeEscalation: false`\n  - `readOnlyRootFilesystem: true`\n- An `emptyDir` volume mounted at `/tmp` so the process has writable scratch space.\n\n```bash\n# Verify:\nkubectl get pod nonroot-pod -o jsonpath='{.spec.securityContext}'\n```",
+    "hints": [
+      {
+        "title": "Combine Pod and Container securityContext",
+        "body": "Put runAsNonRoot, runAsUser, and runAsGroup in the pod-level securityContext. Put allowPrivilegeEscalation and readOnlyRootFilesystem in the container-level securityContext.",
+        "command": "cat <<EOF | kubectl apply -f -\napiVersion: v1\nkind: Pod\nmetadata:\n  name: nonroot-pod\nspec:\n  securityContext:\n    runAsNonRoot: true\n    runAsUser: 10001\n    runAsGroup: 10001\n  containers:\n  - name: app\n    image: busybox:1.36\n    command: [\"sleep\", \"3600\"]\n    securityContext:\n      allowPrivilegeEscalation: false\n      readOnlyRootFilesystem: true\n    volumeMounts:\n    - name: tmp-dir\n      mountPath: /tmp\n  volumes:\n  - name: tmp-dir\n    emptyDir: {}\nEOF"
+      }
+    ],
+    "setup_commands": [],
+    "validation": {
+      "commands": [
+        {
+          "description": "Pod 'nonroot-pod' exists",
+          "command": "kubectl get pod nonroot-pod -o jsonpath='{.metadata.name}'",
+          "expected_output": "nonroot-pod",
+          "match": "exact"
+        },
+        {
+          "description": "runAsNonRoot is true",
+          "command": "kubectl get pod nonroot-pod -o jsonpath='{.spec.securityContext.runAsNonRoot}'",
+          "expected_output": "true",
+          "match": "exact"
+        },
+        {
+          "description": "runAsUser is 10001",
+          "command": "kubectl get pod nonroot-pod -o jsonpath='{.spec.securityContext.runAsUser}'",
+          "expected_output": "10001",
+          "match": "exact"
+        },
+        {
+          "description": "allowPrivilegeEscalation is false",
+          "command": "kubectl get pod nonroot-pod -o jsonpath='{.spec.containers[0].securityContext.allowPrivilegeEscalation}'",
+          "expected_output": "false",
+          "match": "exact"
+        },
+        {
+          "description": "readOnlyRootFilesystem is true",
+          "command": "kubectl get pod nonroot-pod -o jsonpath='{.spec.containers[0].securityContext.readOnlyRootFilesystem}'",
+          "expected_output": "true",
+          "match": "exact"
+        }
+      ]
+    },
+    "default_namespace": "default",
+    "teardown_commands": [
+      {
+        "command": "kubectl delete pod nonroot-pod --ignore-not-found --grace-period=0 --force"
+      }
+    ]
+  },
+  {
+    "id": "annotate-resource-basics",
+    "title": "Annotating Kubernetes Resources",
+    "category": "Core Concepts",
+    "difficulty": "Easy",
+    "type": "task",
+    "weight": 3,
+    "description": "## Annotating Kubernetes Resources\n\nAnnotations attach arbitrary non-identifying metadata to Kubernetes objects — such as contact info, tool versions, or documentation URLs. Unlike labels, annotations **cannot** be used as selectors.\n\n**Your task:**\n\nA Deployment named `myapp` is running in the `default` namespace. Add the following annotations to it:\n- `contact=ops@company.com`\n- `reviewed=true`\n\n```bash\n# Verify:\nkubectl get deployment myapp -o jsonpath='{.metadata.annotations}'\n```",
+    "hints": [
+      {
+        "title": "kubectl annotate",
+        "body": "Use `kubectl annotate` to imperatively add or overwrite annotations on any resource.",
+        "command": "kubectl annotate deployment myapp contact=ops@company.com reviewed=true"
+      },
+      {
+        "title": "Overwrite an existing annotation",
+        "body": "If the annotation key already exists, pass `--overwrite` to update it.",
+        "command": "kubectl annotate deployment myapp contact=ops@company.com reviewed=true --overwrite"
+      }
+    ],
+    "setup_commands": [
+      {
+        "command": "kubectl create deployment myapp --image=nginx:alpine --replicas=1 2>/dev/null || true"
+      },
+      {
+        "command": "kubectl rollout status deployment/myapp --timeout=60s"
+      }
+    ],
+    "validation": {
+      "commands": [
+        {
+          "description": "Deployment 'myapp' exists",
+          "command": "kubectl get deployment myapp -o jsonpath='{.metadata.name}'",
+          "expected_output": "myapp",
+          "match": "exact"
+        },
+        {
+          "description": "Annotation 'contact' is ops@company.com",
+          "command": "kubectl get deployment myapp -o jsonpath='{.metadata.annotations.contact}'",
+          "expected_output": "ops@company.com",
+          "match": "exact"
+        },
+        {
+          "description": "Annotation 'reviewed' is true",
+          "command": "kubectl get deployment myapp -o jsonpath='{.metadata.annotations.reviewed}'",
+          "expected_output": "true",
+          "match": "exact"
+        }
+      ]
+    },
+    "default_namespace": "default",
+    "teardown_commands": [
+      {
+        "command": "kubectl delete deployment myapp --ignore-not-found"
+      }
+    ]
+  },
+  {
+    "id": "init-container-task-basics",
+    "title": "Pod with Init Container",
+    "category": "Core Concepts",
+    "difficulty": "Medium",
+    "type": "task",
+    "weight": 5,
+    "description": "## Pod with Init Container\n\nInit containers run **before** the main application containers start. Each init container must complete successfully before the next one begins, and all must finish before the main containers are started. They are ideal for setup tasks like seeding config files or waiting for a dependency.\n\n**Your task:**\n\nCreate a Pod named `init-demo` with:\n- An **init container** named `setup` using `busybox:1.36` that writes `ready` into `/shared/status.txt`\n- A **main container** named `app` using `busybox:1.36` with command `sleep 3600`\n- Both containers mount an `emptyDir` volume at `/shared`\n\n```bash\n# Verify the init container wrote the file:\nkubectl exec init-demo -- cat /shared/status.txt\n```",
+    "hints": [
+      {
+        "title": "Pod manifest with initContainers",
+        "body": "Define `spec.initContainers[]` above `spec.containers[]`. Both containers share the emptyDir volume mounted at /shared.",
+        "command": "cat <<EOF | kubectl apply -f -\napiVersion: v1\nkind: Pod\nmetadata:\n  name: init-demo\nspec:\n  initContainers:\n  - name: setup\n    image: busybox:1.36\n    command: [\"sh\", \"-c\", \"echo ready > /shared/status.txt\"]\n    volumeMounts:\n    - name: shared-vol\n      mountPath: /shared\n  containers:\n  - name: app\n    image: busybox:1.36\n    command: [\"sleep\", \"3600\"]\n    volumeMounts:\n    - name: shared-vol\n      mountPath: /shared\n  volumes:\n  - name: shared-vol\n    emptyDir: {}\nEOF"
+      }
+    ],
+    "setup_commands": [],
+    "validation": {
+      "commands": [
+        {
+          "description": "Pod 'init-demo' is Running",
+          "command": "kubectl get pod init-demo -o jsonpath='{.status.phase}'",
+          "expected_output": "Running",
+          "match": "exact"
+        },
+        {
+          "description": "Init container 'setup' completed with exit code 0",
+          "command": "kubectl get pod init-demo -o jsonpath='{.status.initContainerStatuses[0].state.terminated.exitCode}'",
+          "expected_output": "0",
+          "match": "exact"
+        },
+        {
+          "description": "File /shared/status.txt contains 'ready'",
+          "command": "kubectl exec init-demo -- cat /shared/status.txt 2>/dev/null",
+          "expected_output": "ready",
+          "match": "contains"
+        }
+      ]
+    },
+    "default_namespace": "default",
+    "teardown_commands": [
+      {
+        "command": "kubectl delete pod init-demo --ignore-not-found --grace-period=0 --force"
+      }
+    ]
+  },
+  {
+    "id": "restart-policy-mcq",
+    "title": "Pod Restart Policies",
+    "category": "Core Concepts",
+    "difficulty": "Easy",
+    "type": "mcq",
+    "weight": 3,
+    "description": "## Pod Restart Policies\n\nA pod runs a one-time database migration script. If the script **fails** (non-zero exit), the container should be restarted. If it **succeeds** (exit 0), it should **not** be restarted.\n\nWhich `restartPolicy` should be set in the pod spec?",
+    "options": [
+      {
+        "id": "a",
+        "text": "`Always` — restarts the container regardless of exit code (this is the default)"
+      },
+      {
+        "id": "b",
+        "text": "`OnFailure` — restarts only if the container exits with a non-zero code"
+      },
+      {
+        "id": "c",
+        "text": "`Never` — the container is never restarted, even on failure"
+      },
+      {
+        "id": "d",
+        "text": "`OnCompletion` — restarts the container only after it completes successfully"
+      }
+    ],
+    "correct_option": "b",
+    "explanation": "`OnFailure` is the right policy for batch workloads like migration scripts — Kubernetes restarts the container on any non-zero exit code but leaves it alone after a clean exit (code 0). `Always` (the default for Deployment pods) would keep restarting even after success, creating an infinite restart loop. `Never` means no automatic recovery on failure. `OnCompletion` does not exist in Kubernetes — the three valid values are `Always`, `OnFailure`, and `Never`. Jobs automatically use `OnFailure` by default.",
+    "hints": [
+      {
+        "title": "restartPolicy values",
+        "body": "Three valid values: `Always` (default for Pods), `OnFailure` (for Jobs/batch), `Never` (run-once, no retry). Check with `kubectl explain pod.spec.restartPolicy`.",
+        "command": "kubectl explain pod.spec.restartPolicy"
+      }
+    ],
+    "setup_commands": [],
+    "default_namespace": "default",
+    "teardown_commands": []
+  },
+  {
+    "id": "kubectl-output-format-mcq",
+    "title": "kubectl Output Formats",
+    "category": "Core Concepts",
+    "difficulty": "Easy",
+    "type": "mcq",
+    "weight": 2,
+    "description": "## kubectl Output Formats\n\nYou need to retrieve the **full live manifest** of a running deployment named `frontend` in YAML format so you can save it to a file for version control.\n\nWhich command produces the correct output?",
+    "options": [
+      {
+        "id": "a",
+        "text": "`kubectl describe deployment frontend` — prints a human-readable summary with events"
+      },
+      {
+        "id": "b",
+        "text": "`kubectl get deployment frontend -o yaml` — prints the full manifest in YAML format"
+      },
+      {
+        "id": "c",
+        "text": "`kubectl export deployment frontend` — exports a portable manifest (removed in k8s 1.18)"
+      },
+      {
+        "id": "d",
+        "text": "`kubectl manifest deployment frontend` — a built-in command for generating manifests"
+      }
+    ],
+    "correct_option": "b",
+    "explanation": "`kubectl get <resource> -o yaml` (or `--output=yaml`) prints the full live manifest as YAML, including all managed fields. `kubectl describe` gives a human-readable summary with events — not a re-applicable YAML manifest. `kubectl export` was removed in Kubernetes 1.18. `kubectl manifest` does not exist. Use `-o json` for JSON output, or `-o jsonpath='...'` to extract specific fields. To save to a file: `kubectl get deployment frontend -o yaml > frontend.yaml`.",
+    "hints": [
+      {
+        "title": "Output format flags",
+        "body": "The `-o` / `--output` flag controls format: `-o yaml`, `-o json`, `-o wide` (extra columns), `-o name` (just the resource name), `-o jsonpath='...'` (field extraction).",
+        "command": "kubectl get deployment frontend -o yaml"
+      }
+    ],
+    "setup_commands": [],
+    "default_namespace": "default",
+    "teardown_commands": []
+  },
+  {
+    "id": "pod-disruption-budget-task",
+    "title": "Configure a PodDisruptionBudget",
+    "category": "Cluster Administration",
+    "difficulty": "Medium",
+    "type": "task",
+    "weight": 6,
+    "description": "## PodDisruptionBudget\n\nA **PodDisruptionBudget (PDB)** limits the number of pods of a replicated application that are down simultaneously during voluntary disruptions (node drains, cluster upgrades). It is a critical CKA topic.\n\n**Your task:**\n\nA Deployment named `web-app` with **3 replicas** is already running. Create a **PodDisruptionBudget** named `web-pdb` in the `default` namespace that:\n- Applies to pods with the label `app=web-app`\n- Ensures **at least 2 pods** are always available (`minAvailable: 2`)\n\n```bash\n# Verify:\nkubectl get pdb web-pdb\n```",
+    "hints": [
+      {
+        "title": "PodDisruptionBudget manifest",
+        "body": "Use `spec.minAvailable` (integer or percentage) and `spec.selector.matchLabels` to target the right pods.",
+        "command": "cat <<EOF | kubectl apply -f -\napiVersion: policy/v1\nkind: PodDisruptionBudget\nmetadata:\n  name: web-pdb\nspec:\n  minAvailable: 2\n  selector:\n    matchLabels:\n      app: web-app\nEOF"
+      },
+      {
+        "title": "Check the PDB status",
+        "body": "After creating the PDB, check `kubectl get pdb web-pdb` — the ALLOWED DISRUPTIONS column shows how many pods can be disrupted at once.",
+        "command": "kubectl get pdb web-pdb -o wide"
+      }
+    ],
+    "setup_commands": [
+      {
+        "command": "kubectl create deployment web-app --image=nginx:alpine --replicas=3 2>/dev/null || true"
+      },
+      {
+        "command": "kubectl rollout status deployment/web-app --timeout=90s"
+      }
+    ],
+    "validation": {
+      "commands": [
+        {
+          "description": "PDB 'web-pdb' exists",
+          "command": "kubectl get pdb web-pdb -o jsonpath='{.metadata.name}'",
+          "expected_output": "web-pdb",
+          "match": "exact"
+        },
+        {
+          "description": "minAvailable is 2",
+          "command": "kubectl get pdb web-pdb -o jsonpath='{.spec.minAvailable}'",
+          "expected_output": "2",
+          "match": "exact"
+        },
+        {
+          "description": "PDB selector targets app=web-app",
+          "command": "kubectl get pdb web-pdb -o jsonpath='{.spec.selector.matchLabels.app}'",
+          "expected_output": "web-app",
+          "match": "exact"
+        },
+        {
+          "description": "Deployment 'web-app' has 3 replicas",
+          "command": "kubectl get deployment web-app -o jsonpath='{.spec.replicas}'",
+          "expected_output": "3",
+          "match": "exact"
+        }
+      ]
+    },
+    "default_namespace": "default",
+    "teardown_commands": [
+      {
+        "command": "kubectl delete pdb web-pdb --ignore-not-found"
+      },
+      {
+        "command": "kubectl delete deployment web-app --ignore-not-found"
+      }
+    ]
+  },
+  {
+    "id": "priority-class-task",
+    "title": "Pod Priority and PriorityClass",
+    "category": "Workloads & Scheduling",
+    "difficulty": "Medium",
+    "type": "task",
+    "weight": 6,
+    "description": "## Pod Priority and PriorityClass\n\n**PriorityClasses** assign a numeric priority to pods. When cluster resources are scarce, the scheduler preempts lower-priority pods to make room for higher-priority ones. This is a CKA exam topic.\n\n**Your task:**\n\n1. Create a **PriorityClass** named `high-priority` with:\n   - `value: 1000000`\n   - `globalDefault: false`\n   - `description: \"High priority workloads\"`\n2. Create a Pod named `critical-pod` using `nginx:alpine` that references the `high-priority` PriorityClass via `spec.priorityClassName`\n\n```bash\n# Verify:\nkubectl get priorityclass high-priority\nkubectl get pod critical-pod -o jsonpath='{.spec.priorityClassName}'\n```",
+    "hints": [
+      {
+        "title": "Create the PriorityClass",
+        "body": "PriorityClass is a cluster-scoped resource (not namespaced). Higher value = higher priority.",
+        "command": "cat <<EOF | kubectl apply -f -\napiVersion: scheduling.k8s.io/v1\nkind: PriorityClass\nmetadata:\n  name: high-priority\nvalue: 1000000\ndescription: \"High priority workloads\"\nEOF"
+      },
+      {
+        "title": "Reference PriorityClass in a Pod",
+        "body": "Set `spec.priorityClassName` in the pod spec to the name of your PriorityClass.",
+        "command": "cat <<EOF | kubectl apply -f -\napiVersion: v1\nkind: Pod\nmetadata:\n  name: critical-pod\nspec:\n  priorityClassName: high-priority\n  containers:\n  - name: app\n    image: nginx:alpine\nEOF"
+      }
+    ],
+    "setup_commands": [],
+    "validation": {
+      "commands": [
+        {
+          "description": "PriorityClass 'high-priority' exists",
+          "command": "kubectl get priorityclass high-priority -o jsonpath='{.metadata.name}'",
+          "expected_output": "high-priority",
+          "match": "exact"
+        },
+        {
+          "description": "PriorityClass value is 1000000",
+          "command": "kubectl get priorityclass high-priority -o jsonpath='{.value}'",
+          "expected_output": "1000000",
+          "match": "exact"
+        },
+        {
+          "description": "Pod 'critical-pod' uses high-priority PriorityClass",
+          "command": "kubectl get pod critical-pod -o jsonpath='{.spec.priorityClassName}'",
+          "expected_output": "high-priority",
+          "match": "exact"
+        },
+        {
+          "description": "Pod 'critical-pod' is Running",
+          "command": "kubectl get pod critical-pod -o jsonpath='{.status.phase}'",
+          "expected_output": "Running",
+          "match": "exact"
+        }
+      ]
+    },
+    "default_namespace": "default",
+    "teardown_commands": [
+      {
+        "command": "kubectl delete pod critical-pod --ignore-not-found --grace-period=0 --force"
+      },
+      {
+        "command": "kubectl delete priorityclass high-priority --ignore-not-found"
+      }
+    ]
   }
 ]

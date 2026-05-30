@@ -2,7 +2,7 @@
   {
     "id": "k8s-basics",
     "name": "Kubernetes Basics",
-    "icon": "\ud83c\udf31",
+    "icon": "🌱",
     "tagline": "Core concepts for beginners",
     "color": "#3fb950",
     "colorDim": "rgba(63,185,80,0.12)",
@@ -33,14 +33,18 @@
       "dry-run-manifest-basics",
       "delete-by-label-basics",
       "kubectl-cp-basics",
-      "exec-command-basics"
+      "exec-command-basics",
+      "annotate-resource-basics",
+      "init-container-task-basics",
+      "restart-policy-mcq",
+      "kubectl-output-format-mcq"
     ]
   },
   {
     "id": "k8s-admin",
     "name": "Kubernetes Administrator",
-    "icon": "\ud83e\uddd1\u200d\u2708\ufe0f",
-    "tagline": "CKA exam \u2014 cluster administration",
+    "icon": "🧑‍✈️",
+    "tagline": "CKA exam — cluster administration",
     "color": "#58a6ff",
     "colorDim": "rgba(88,166,255,0.12)",
     "exam_minutes": 120,
@@ -72,14 +76,16 @@
       "pod-security-context",
       "broken-deployment",
       "crashloop-fix",
-      "container-logging-mcq"
+      "container-logging-mcq",
+      "pod-disruption-budget-task",
+      "priority-class-task"
     ]
   },
   {
     "id": "k8s-appdev",
     "name": "Kubernetes Developer",
-    "icon": "\ud83d\udee0\ufe0f",
-    "tagline": "CKAD exam \u2014 application development",
+    "icon": "🛠️",
+    "tagline": "CKAD exam — application development",
     "color": "#bc8cff",
     "colorDim": "rgba(188,140,255,0.12)",
     "exam_minutes": 120,
@@ -114,8 +120,8 @@
   {
     "id": "k8s-security",
     "name": "Kubernetes Security",
-    "icon": "\ud83d\udee1",
-    "tagline": "CKS exam \u2014 hardening and threats",
+    "icon": "🛡",
+    "tagline": "CKS exam — hardening and threats",
     "color": "#f97316",
     "colorDim": "rgba(249,115,22,0.12)",
     "exam_minutes": 120,
@@ -140,7 +146,11 @@
       "cks-tls-ingress",
       "cks-image-pull-secret",
       "cks-mcq-sandboxing",
-      "cks-mcq-audit-policy"
+      "cks-mcq-audit-policy",
+      "cks-runtime-class",
+      "cks-audit-policy",
+      "cks-egress-namespace",
+      "cks-non-root-enforce"
     ]
   }
 ]

@@ -104,8 +104,8 @@ function runCommand(cmd, timeoutMs = 15000) {
 }
 
 function checkMatch(actual, expected, matchType) {
-  const a = actual.trim();
-  const e = expected.trim();
+  const a = String(actual).trim();
+  const e = String(expected).trim();
   if (matchType === 'exact') return a === e;
   if (matchType === 'contains') return a.includes(e);
   if (matchType === 'not_contains') return !a.includes(e);
