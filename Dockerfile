@@ -49,7 +49,9 @@ COPY frontend/package.json frontend/vite.config.js ./frontend/
 RUN cd frontend && npm install
 
 COPY frontend/ ./frontend/
-RUN cd frontend && npm run build
+# ARG is declared here so it only busts the cache for this layer
+ARG VITE_APP_VERSION=dev
+RUN cd frontend && VITE_APP_VERSION=${VITE_APP_VERSION} npm run build
 
 # Copy everything else
 COPY backend/  ./backend/

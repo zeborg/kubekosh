@@ -10,5 +10,11 @@ export default defineConfig({
   },
   build: {
     outDir: 'dist'
+  },
+  define: {
+    // Fallback to 'dev' when VITE_APP_VERSION is not injected at build time
+    'import.meta.env.VITE_APP_VERSION': JSON.stringify(
+      process.env.VITE_APP_VERSION || 'dev'
+    )
   }
 })

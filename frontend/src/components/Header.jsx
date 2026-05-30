@@ -19,7 +19,7 @@ export default function Header({ clusterReady }) {
         <div className={styles.logo}>
           <img src="/logo.svg" alt="KubeKosh Logo" className={styles.logoImage} />
           <span className={styles.logoText}>KubeKosh</span>
-          <span className={styles.version}>v0.1.0</span>
+          <span className={styles.version}>{import.meta.env.VITE_APP_VERSION}</span>
         </div>
         <span className={styles.tagline}>Interactive Kubernetes Playground</span>
       </div>
