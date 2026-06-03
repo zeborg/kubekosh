@@ -563,9 +563,18 @@ function isAllowedOrigin(req) {
   const origin = req.headers.origin;
   if (!origin) return false;
   if (ALLOWED_ORIGINS) return ALLOWED_ORIGINS.includes(origin);
-  const protocol = req.headers['x-forwarded-proto'] || 'http';
-  const host = req.headers['x-forwarded-host'] || req.headers.host;
-  return !!host && origin === `${protocol}://${host}`;
+
+  try {
+    const originUrl = new URL(origin);
+    const protocol = req.headers['x-forwarded-proto'] || originUrl.protocol.replace(':', '') || 'http';
+    const forwardedHost = req.headers['x-forwarded-host'] || req.headers.host;
+    if (!forwardedHost) return false;
+
+    const forwardedUrl = new URL(`${protocol}://${forwardedHost}`);
+    return originUrl.protocol === forwardedUrl.protocol && originUrl.host === forwardedUrl.host;
+  } catch (_) {
+    return false;
+  }
 }
 
 server.on('upgrade', (req, socket, head) => {

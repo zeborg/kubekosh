@@ -23,18 +23,20 @@ RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
     && rm -rf /var/lib/apt/lists/*
 
 # ── k3s (bundles kubectl, containerd, everything) ────────────────────────────
-# We download the binary and the airgap images so the cluster starts offline.
 RUN set -eux && \
-    case "$(uname -m)" in \
-      x86_64)  K3S_BIN="k3s" ;; \
-      aarch64) K3S_BIN="k3s-arm64" ;; \
-      *) echo "Unsupported arch: $(uname -m)" && exit 1 ;; \
-    esac && \
-    curl -fsSL "https://github.com/k3s-io/k3s/releases/latest/download/${K3S_BIN}" \
-      -o /usr/local/bin/k3s && \
-    chmod +x /usr/local/bin/k3s && \
-    ln -sf /usr/local/bin/k3s /usr/local/bin/kubectl && \
-    ln -sf /usr/local/bin/k3s /usr/local/bin/crictl
+        case "$(uname -m)" in \
+            x86_64)  K3S_BIN="k3s" ;; \
+            aarch64) K3S_BIN="k3s-arm64" ;; \
+            *) echo "Unsupported arch: $(uname -m)" && exit 1 ;; \
+        esac && \
+        curl -4 --fail --show-error --silent --location \
+            --retry 12 --retry-delay 5 --retry-all-errors \
+            --connect-timeout 20 --max-time 900 \
+            "https://github.com/k3s-io/k3s/releases/latest/download/${K3S_BIN}" \
+            -o /usr/local/bin/k3s && \
+        chmod +x /usr/local/bin/k3s && \
+        ln -sf /usr/local/bin/k3s /usr/local/bin/kubectl && \
+        ln -sf /usr/local/bin/k3s /usr/local/bin/crictl
 
 
 # ── App files ─────────────────────────────────────────────────────────────────
