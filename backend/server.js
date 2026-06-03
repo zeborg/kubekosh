@@ -3,6 +3,9 @@ const fs = require('fs');
 const path = require('path');
 const { execSync, exec } = require('child_process');
 const Database = require('better-sqlite3');
+const http = require('http');
+const WebSocket = require('ws');
+const pty = require('node-pty');
 
 const app = express();
 const PORT = 4000;
@@ -82,12 +85,18 @@ function saveProgress(progress) {
 }
 
 
+// In-memory cache for static data — avoids reading disk on every request
+let _scenariosCache = null;
+let _bundlesCache = null;
+
 function loadScenarios() {
-  return JSON.parse(fs.readFileSync(SCENARIOS_FILE, 'utf8'));
+  if (!_scenariosCache) _scenariosCache = JSON.parse(fs.readFileSync(SCENARIOS_FILE, 'utf8'));
+  return _scenariosCache;
 }
 
 function loadBundles() {
-  return JSON.parse(fs.readFileSync(BUNDLES_FILE, 'utf8'));
+  if (!_bundlesCache) _bundlesCache = JSON.parse(fs.readFileSync(BUNDLES_FILE, 'utf8'));
+  return _bundlesCache;
 }
 
 function runCommand(cmd, timeoutMs = 15000) {
@@ -109,8 +118,25 @@ function checkMatch(actual, expected, matchType) {
   if (matchType === 'exact') return a === e;
   if (matchType === 'contains') return a.includes(e);
   if (matchType === 'not_contains') return !a.includes(e);
-  if (matchType === 'regex') return new RegExp(e).test(a);
+  if (matchType === 'regex') {
+    try { return new RegExp(e).test(a); } catch (_) { return false; }
+  }
   return a === e;
+}
+
+function parseDbDate(value) {
+  if (!value) return null;
+  const normalized = String(value).includes('T')
+    ? String(value)
+    : String(value).replace(' ', 'T') + 'Z';
+  const parsed = Date.parse(normalized);
+  return Number.isNaN(parsed) ? null : parsed;
+}
+
+function toPublicScenario(scenario) {
+  if (!scenario || scenario.type !== 'mcq') return scenario;
+  const { correct_option, explanation, ...publicScenario } = scenario;
+  return publicScenario;
 }
 
 // Active WebSocket terminal clients — write output directly (NOT as shell input)
@@ -212,8 +238,8 @@ app.post('/api/sessions/:id/submit', (req, res) => {
     completed_at: progress[s.id]?.completed_at || null,
     attempts: progress[s.id]?.attempts || 0,
   }));
-  const startedAt = new Date(session.started_at + 'Z');
-  const durationSecs = Math.round((Date.now() - startedAt.getTime()) / 1000);
+  const startedAtMs = parseDbDate(session.started_at) || Date.now();
+  const durationSecs = Math.round((Date.now() - startedAtMs) / 1000);
   db.prepare(`UPDATE sessions SET status='submitted', submitted_at=datetime('now'),
               duration_secs=?, snapshot=? WHERE id=?`)
     .run(durationSecs, JSON.stringify(snapshot), req.params.id);
@@ -250,7 +276,9 @@ app.post('/api/scenarios/:id/context', (req, res) => {
   const scenarios = loadScenarios();
   const scenario = scenarios.find(s => s.id === req.params.id);
   if (!scenario) return res.status(404).json({ error: 'Scenario not found' });
-  const ns = scenario.default_namespace || 'default';
+  const rawNs = scenario.default_namespace || 'default';
+  // Validate namespace to prevent command injection
+  const ns = /^[a-z0-9][a-z0-9-]{0,61}[a-z0-9]$|^[a-z0-9]$/.test(rawNs) ? rawNs : 'default';
 
   // VT sequences: clear visible screen + scrollback, then move cursor to top-left
   const clearScreen = '\x1b[2J\x1b[3J\x1b[H';
@@ -320,7 +348,7 @@ app.get('/api/scenarios/:id', (req, res) => {
   if (!scenario) return res.status(404).json({ error: 'Scenario not found' });
   const progress = loadProgress();
   res.json({
-    ...scenario,
+    ...toPublicScenario(scenario),
     progress: progress[scenario.id] || { status: 'not_started', attempts: 0 }
   });
 });
@@ -458,10 +486,16 @@ app.post('/api/progress/reset/:id', (req, res) => {
   res.json({ ok: true });
 });
 
-// GET /api/health
+// GET /api/health — cached for 5s to avoid blocking the event loop on every poll
+let _healthCache = null;
+let _healthCacheAt = 0;
 app.get('/api/health', (req, res) => {
+  const now = Date.now();
+  if (_healthCache && (now - _healthCacheAt) < 5000) return res.json(_healthCache);
   const kube = runCommand('kubectl cluster-info --request-timeout=3s 2>&1 | head -1');
-  res.json({ api: 'ok', cluster: kube.success ? 'ready' : 'not_ready', cluster_info: kube.output });
+  _healthCache = { api: 'ok', cluster: kube.success ? 'ready' : 'not_ready', cluster_info: kube.output };
+  _healthCacheAt = now;
+  res.json(_healthCache);
 });
 
 // Fallback to frontend SPA
@@ -470,9 +504,6 @@ app.get('*', (req, res) => {
 });
 
 // ── WebSocket PTY terminal ────────────────────────────────────────────────────
-const http = require('http');
-const WebSocket = require('ws');
-const pty = require('node-pty');
 
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ noServer: true });
@@ -523,14 +554,26 @@ wss.on('connection', (ws) => {
 });
 
 // Handle WebSocket upgrades only for /shell-ws
+// Restrict to same-host origin by default to prevent cross-origin shell access.
+const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS
+  ? process.env.ALLOWED_ORIGINS.split(',').map(origin => origin.trim()).filter(Boolean)
+  : null;
+
+function isAllowedOrigin(req) {
+  const origin = req.headers.origin;
+  if (!origin) return false;
+  if (ALLOWED_ORIGINS) return ALLOWED_ORIGINS.includes(origin);
+  const protocol = req.headers['x-forwarded-proto'] || 'http';
+  const host = req.headers['x-forwarded-host'] || req.headers.host;
+  return !!host && origin === `${protocol}://${host}`;
+}
+
 server.on('upgrade', (req, socket, head) => {
-  if (req.url === '/shell-ws') {
-    wss.handleUpgrade(req, socket, head, (ws) => {
-      wss.emit('connection', ws, req);
-    });
-  } else {
-    socket.destroy();
-  }
+  if (req.url !== '/shell-ws') { socket.destroy(); return; }
+  if (!isAllowedOrigin(req)) { socket.destroy(); return; }
+  wss.handleUpgrade(req, socket, head, (ws) => {
+    wss.emit('connection', ws, req);
+  });
 });
 
 server.listen(PORT, () => console.log(`API server running on :${PORT}`));

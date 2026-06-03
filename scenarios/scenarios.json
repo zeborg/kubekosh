@@ -136,7 +136,7 @@
       {
         "title": "Apply and verify",
         "body": "Apply the manifest and confirm files are visible inside the container.",
-        "command": "kubectl apply -f /tmp/config-reader.yaml && kubectl exec config-reader -- ls /etc/app-config"
+        "command": "kubectl get pod config-reader && kubectl exec config-reader -- ls /etc/app-config"
       }
     ],
     "setup_commands": [],
@@ -1124,12 +1124,12 @@
     "difficulty": "Easy",
     "type": "task",
     "weight": 5,
-    "description": "## Node Labels and nodeSelector\n\nLabelling nodes lets you constrain which nodes a pod can be scheduled on, using `nodeSelector` in the pod spec.\n\n**Your task:**\n\n1. Add the label `disk=ssd` to node `k8s-lab`\n2. Create a Pod named `ssd-pod` using `nginx:alpine` that uses `nodeSelector` to target nodes with `disk=ssd`",
+    "description": "## Node Labels and nodeSelector\n\nLabelling nodes lets you constrain which nodes a pod can be scheduled on, using `nodeSelector` in the pod spec.\n\n**Your task:**\n\n1. Pick the first node returned by `kubectl get nodes -o name` and add the label `disk=ssd` to it\n2. Create a Pod named `ssd-pod` using `nginx:alpine` that uses `nodeSelector` to target nodes with `disk=ssd`",
     "hints": [
       {
         "title": "Label the node",
         "body": "Use `kubectl label node <node-name> key=value`.",
-        "command": "kubectl label node k8s-lab disk=ssd --overwrite"
+        "command": "kubectl label node \"$(kubectl get nodes -o jsonpath='{.items[0].metadata.name}')\" disk=ssd --overwrite"
       },
       {
         "title": "Use nodeSelector in pod spec",
@@ -1141,8 +1141,8 @@
     "validation": {
       "commands": [
         {
-          "description": "Node 'k8s-lab' has label disk=ssd",
-          "command": "kubectl get node k8s-lab -o jsonpath='{.metadata.labels.disk}'",
+          "description": "First node has label disk=ssd",
+          "command": "kubectl get node \"$(kubectl get nodes -o jsonpath='{.items[0].metadata.name}')\" -o jsonpath='{.metadata.labels.disk}'",
           "expected_output": "ssd",
           "match": "exact"
         },
@@ -1163,7 +1163,7 @@
     "default_namespace": "default",
     "teardown_commands": [
       {
-        "command": "kubectl label node k8s-lab disk- 2>/dev/null || true"
+        "command": "kubectl label node \"$(kubectl get nodes -o jsonpath='{.items[0].metadata.name}')\" disk- 2>/dev/null || true"
       },
       {
         "command": "kubectl delete pod ssd-pod --ignore-not-found --grace-period=0 --force"
@@ -1177,7 +1177,7 @@
     "difficulty": "Medium",
     "type": "task",
     "weight": 7,
-    "description": "## Taints and Tolerations\n\nTaints allow a node to **repel** pods. A toleration on a pod allows it to be scheduled onto a tainted node.\n\nThe node `k8s-lab` has been tainted with `env=gpu:NoSchedule`.\n\n**Your task:**\n\nCreate a Pod named `gpu-pod` using `nginx:alpine` that tolerates the taint `env=gpu:NoSchedule` so it can be scheduled on this node.\n\n```bash\nkubectl describe node k8s-lab | grep -A5 Taints\n```",
+    "description": "## Taints and Tolerations\n\nTaints allow a node to **repel** pods. A toleration on a pod allows it to be scheduled onto a tainted node.\n\nThe first node returned by `kubectl get nodes -o name` has been tainted with `env=gpu:NoSchedule`.\n\n**Your task:**\n\nCreate a Pod named `gpu-pod` using `nginx:alpine` that tolerates the taint `env=gpu:NoSchedule` so it can be scheduled on this node.\n\n```bash\nkubectl describe node \"$(kubectl get nodes -o jsonpath='{.items[0].metadata.name}')\" | grep -A5 Taints\n```",
     "hints": [
       {
         "title": "Toleration structure",
@@ -1187,14 +1187,14 @@
     ],
     "setup_commands": [
       {
-        "command": "kubectl taint nodes k8s-lab env=gpu:NoSchedule --overwrite=true 2>/dev/null || true"
+        "command": "kubectl taint nodes \"$(kubectl get nodes -o jsonpath='{.items[0].metadata.name}')\" env=gpu:NoSchedule --overwrite=true 2>/dev/null || true"
       }
     ],
     "validation": {
       "commands": [
         {
           "description": "Node has taint env=gpu:NoSchedule",
-          "command": "kubectl get node k8s-lab -o jsonpath='{.spec.taints[*].key}'",
+          "command": "kubectl get node \"$(kubectl get nodes -o jsonpath='{.items[0].metadata.name}')\" -o jsonpath='{.spec.taints[*].key}'",
           "expected_output": "env",
           "match": "contains"
         },
@@ -1215,7 +1215,7 @@
     "default_namespace": "default",
     "teardown_commands": [
       {
-        "command": "kubectl taint nodes k8s-lab env:NoSchedule- 2>/dev/null || true"
+        "command": "kubectl taint nodes \"$(kubectl get nodes -o jsonpath='{.items[0].metadata.name}')\" env:NoSchedule- 2>/dev/null || true"
       },
       {
         "command": "kubectl delete pod gpu-pod --ignore-not-found --grace-period=0 --force"
@@ -3566,31 +3566,31 @@
       "commands": [
         {
           "description": "Audit policy file is valid YAML with kind: Policy",
-          "command": "python3 -c \"import yaml; p=yaml.safe_load(open('/etc/kubernetes/audit-policy.yaml')); print(p.get('kind',''))\"",
+          "command": "grep -Eq '^kind: Policy$' /etc/kubernetes/audit-policy.yaml && echo Policy || echo fail",
           "expected_output": "Policy",
           "match": "exact"
         },
         {
           "description": "Rule 1: level is RequestResponse and targets secrets",
-          "command": "python3 -c \"import yaml; p=yaml.safe_load(open('/etc/kubernetes/audit-policy.yaml')); r=p['rules'][0]; print('ok' if r['level']=='RequestResponse' and any('secrets' in x.get('resources',[]) for x in r.get('resources',[])) else 'fail')\"",
+          "command": "awk '/^- level: RequestResponse$/{flag=1;next} /^- level: /&&flag{flag=0} flag && index($0, \"resources: [\\\"secrets\\\"]\"){print \"ok\"; found=1; exit} END{if(!found) print \"fail\"}' /etc/kubernetes/audit-policy.yaml",
           "expected_output": "ok",
           "match": "exact"
         },
         {
           "description": "Rule 2: level is Metadata, targets pods, verbs include get/list/watch",
-          "command": "python3 -c \"import yaml; p=yaml.safe_load(open('/etc/kubernetes/audit-policy.yaml')); print('ok' if any(r.get('level')=='Metadata' and any('pods' in x.get('resources',[]) for x in r.get('resources',[])) and set(r.get('verbs',[])) >= {'get','list','watch'} for r in p['rules']) else 'fail')\"",
+          "command": "awk '/^- level: Metadata$/{flag=1;verbs=0;pods=0;next} /^- level: /&&flag{if(verbs&&pods){print \"ok\"; found=1; exit} flag=0} flag && index($0, \"verbs: [\\\"get\\\", \\\"list\\\", \\\"watch\\\"]\"){verbs=1} flag && index($0, \"resources: [\\\"pods\\\"]\"){pods=1} END{if(!found && verbs&&pods){print \"ok\"; found=1} if(!found) print \"fail\"}' /etc/kubernetes/audit-policy.yaml",
           "expected_output": "ok",
           "match": "exact"
         },
         {
           "description": "Rule 3: level is None for system:masters group",
-          "command": "python3 -c \"import yaml; p=yaml.safe_load(open('/etc/kubernetes/audit-policy.yaml')); print('ok' if any(r.get('level')=='None' and 'system:masters' in r.get('userGroups',[]) for r in p['rules']) else 'fail')\"",
+          "command": "awk '/^- level: None$/{flag=1;next} /^- level: /&&flag{flag=0} flag && index($0, \"userGroups: [\\\"system:masters\\\"]\"){print \"ok\"; found=1; exit} END{if(!found) print \"fail\"}' /etc/kubernetes/audit-policy.yaml",
           "expected_output": "ok",
           "match": "exact"
         },
         {
           "description": "Rule 4: catch-all is level Metadata with no other selectors",
-          "command": "python3 -c \"import yaml; p=yaml.safe_load(open('/etc/kubernetes/audit-policy.yaml')); last=p['rules'][-1]; print('ok' if set(last.keys())=={'level'} and last['level']=='Metadata' else 'fail')\"",
+          "command": "awk 'NF{line=$0} END{print (line==\"- level: Metadata\" ? \"ok\" : \"fail\")}' /etc/kubernetes/audit-policy.yaml",
           "expected_output": "ok",
           "match": "exact"
         }
@@ -4022,5 +4022,500 @@
         "command": "kubectl delete priorityclass high-priority --ignore-not-found"
       }
     ]
+  },
+  {
+    "id": "configmap-envfrom-mcq",
+    "title": "Load Environment Variables from a ConfigMap",
+    "category": "Configuration",
+    "difficulty": "Easy",
+    "type": "mcq",
+    "weight": 3,
+    "description": "## Populate Container Environment from a ConfigMap\n\nA ConfigMap named `app-settings` already exists and contains multiple keys. You want a Pod to import **all keys as environment variables** without listing each one individually.\n\nWhich field should you use in the container spec?",
+    "options": [
+      {
+        "id": "a",
+        "text": "`envFrom.configMapRef.name: app-settings`"
+      },
+      {
+        "id": "b",
+        "text": "`volumeMounts.configMap.name: app-settings`"
+      },
+      {
+        "id": "c",
+        "text": "`env.valueFrom.fieldRef.name: app-settings`"
+      },
+      {
+        "id": "d",
+        "text": "`argsFrom.configMapRef.name: app-settings`"
+      }
+    ],
+    "correct_option": "a",
+    "explanation": "`envFrom` with `configMapRef` imports every key from the ConfigMap as an environment variable. `volumeMounts` mounts files, not env vars. `fieldRef` exposes pod fields, and `argsFrom` is not a valid container field.",
+    "hints": [],
+    "setup_commands": [],
+    "default_namespace": "default",
+    "teardown_commands": []
+  },
+  {
+    "id": "serviceaccount-default-mcq",
+    "title": "Default ServiceAccount Assignment",
+    "category": "Security",
+    "difficulty": "Easy",
+    "type": "mcq",
+    "weight": 3,
+    "description": "## Default ServiceAccount Behavior\n\nA Pod manifest does not set `spec.serviceAccountName`. The Pod is created in the namespace `payments`.\n\nWhich ServiceAccount will the Pod use by default?",
+    "options": [
+      {
+        "id": "a",
+        "text": "The cluster-wide `default` ServiceAccount from the `kube-system` namespace"
+      },
+      {
+        "id": "b",
+        "text": "No ServiceAccount is assigned unless one is specified explicitly"
+      },
+      {
+        "id": "c",
+        "text": "The `default` ServiceAccount in the `payments` namespace"
+      },
+      {
+        "id": "d",
+        "text": "A new ServiceAccount is created automatically with the Pod name"
+      }
+    ],
+    "correct_option": "c",
+    "explanation": "Every namespace gets a `default` ServiceAccount, and Pods use it automatically unless `serviceAccountName` is set to another ServiceAccount.",
+    "hints": [],
+    "setup_commands": [],
+    "default_namespace": "default",
+    "teardown_commands": []
+  },
+  {
+    "id": "rolebinding-scope-mcq",
+    "title": "Grant a ClusterRole in One Namespace",
+    "category": "Security",
+    "difficulty": "Medium",
+    "type": "mcq",
+    "weight": 4,
+    "description": "## Namespaced Use of a ClusterRole\n\nYou already have a ClusterRole named `view`. You want to grant that permission set to a team **only inside the `dev` namespace**.\n\nWhat should you create?",
+    "options": [
+      {
+        "id": "a",
+        "text": "A `RoleBinding` in the `dev` namespace that references the ClusterRole `view`"
+      },
+      {
+        "id": "b",
+        "text": "A `ClusterRoleBinding` scoped to the `dev` namespace"
+      },
+      {
+        "id": "c",
+        "text": "A second ClusterRole named `view-dev` and no binding"
+      },
+      {
+        "id": "d",
+        "text": "A `Role` in `dev` that points to the ClusterRole with `roleRef.namespace`"
+      }
+    ],
+    "correct_option": "a",
+    "explanation": "A `RoleBinding` is namespaced and can reference either a Role or a ClusterRole. That makes it the correct way to grant ClusterRole permissions in only one namespace.",
+    "hints": [],
+    "setup_commands": [],
+    "default_namespace": "default",
+    "teardown_commands": []
+  },
+  {
+    "id": "pvc-access-mode-mcq",
+    "title": "PVC Access Modes",
+    "category": "Storage",
+    "difficulty": "Easy",
+    "type": "mcq",
+    "weight": 3,
+    "description": "## Interpret ReadWriteOnce\n\nA PersistentVolumeClaim requests the access mode `ReadWriteOnce` (`RWO`).\n\nWhat does that guarantee?",
+    "options": [
+      {
+        "id": "a",
+        "text": "The volume can be mounted as read-write by many nodes at the same time"
+      },
+      {
+        "id": "b",
+        "text": "The volume can be mounted as read-only by exactly one pod"
+      },
+      {
+        "id": "c",
+        "text": "The volume can be mounted as read-write by a single node at a time"
+      },
+      {
+        "id": "d",
+        "text": "The volume can be mounted by any number of pods as long as they are in one namespace"
+      }
+    ],
+    "correct_option": "c",
+    "explanation": "`ReadWriteOnce` means one node can mount the volume read-write at a time. Multiple pods may share it only if they run on the same node and the storage plugin supports that behavior.",
+    "hints": [],
+    "setup_commands": [],
+    "default_namespace": "default",
+    "teardown_commands": []
+  },
+  {
+    "id": "service-selector-mcq",
+    "title": "How a Service Finds Pods",
+    "category": "Networking",
+    "difficulty": "Easy",
+    "type": "mcq",
+    "weight": 3,
+    "description": "## Service-to-Pod Selection\n\nA Service has the selector `app=api`.\n\nWhich pods become endpoints for that Service?",
+    "options": [
+      {
+        "id": "a",
+        "text": "Only pods created by a Deployment named `api`"
+      },
+      {
+        "id": "b",
+        "text": "Any running pod in the same namespace whose labels include `app=api`"
+      },
+      {
+        "id": "c",
+        "text": "All pods exposing container port 80"
+      },
+      {
+        "id": "d",
+        "text": "Only pods that declare `serviceName: api` in their spec"
+      }
+    ],
+    "correct_option": "b",
+    "explanation": "Services select pods by labels, not by deployment name, container port alone, or any `serviceName` field on a regular pod.",
+    "hints": [],
+    "setup_commands": [],
+    "default_namespace": "default",
+    "teardown_commands": []
+  },
+  {
+    "id": "networkpolicy-default-deny-mcq",
+    "title": "Default Deny Ingress Policy",
+    "category": "Networking",
+    "difficulty": "Medium",
+    "type": "mcq",
+    "weight": 4,
+    "description": "## Deny All Ingress First\n\nYou want to create a namespace-wide baseline that denies all ingress traffic until explicit allow rules are added later.\n\nWhich NetworkPolicy shape achieves that?",
+    "options": [
+      {
+        "id": "a",
+        "text": "A policy with `podSelector: {}` and `policyTypes: [Ingress]` and no ingress allow rules"
+      },
+      {
+        "id": "b",
+        "text": "A policy with `podSelector: {}` and one ingress rule with `from: []`"
+      },
+      {
+        "id": "c",
+        "text": "A Service of type ClusterIP with no endpoints"
+      },
+      {
+        "id": "d",
+        "text": "A policy with `podSelector: null` and `policyTypes: [Egress]`"
+      }
+    ],
+    "correct_option": "a",
+    "explanation": "A NetworkPolicy that selects all pods with `podSelector: {}` and declares `Ingress` with no allow list creates default-deny ingress for the selected pods.",
+    "hints": [],
+    "setup_commands": [],
+    "default_namespace": "default",
+    "teardown_commands": []
+  },
+  {
+    "id": "ingress-host-routing-mcq",
+    "title": "Ingress Host-Based Routing",
+    "category": "Networking",
+    "difficulty": "Easy",
+    "type": "mcq",
+    "weight": 3,
+    "description": "## Route Traffic by Host Header\n\nYou need an Ingress to send requests for `api.example.com` to one backend service and requests for `web.example.com` to another.\n\nWhich Ingress feature should you use?",
+    "options": [
+      {
+        "id": "a",
+        "text": "Separate `rules[].host` values for each backend"
+      },
+      {
+        "id": "b",
+        "text": "Two different `ingressClassName` values in one manifest"
+      },
+      {
+        "id": "c",
+        "text": "A NodePort Service for each hostname"
+      },
+      {
+        "id": "d",
+        "text": "A Pod annotation on each backend Deployment"
+      }
+    ],
+    "correct_option": "a",
+    "explanation": "Host-based routing is configured with multiple Ingress rules using different `host` values. Each host can point to a different service backend.",
+    "hints": [],
+    "setup_commands": [],
+    "default_namespace": "default",
+    "teardown_commands": []
+  },
+  {
+    "id": "headless-service-mcq",
+    "title": "Headless Services",
+    "category": "Services & Networking",
+    "difficulty": "Medium",
+    "type": "mcq",
+    "weight": 4,
+    "description": "## Skip the ClusterIP\n\nA StatefulSet needs direct DNS records for each pod instead of a single virtual IP load balancer.\n\nHow do you define the required Service?",
+    "options": [
+      {
+        "id": "a",
+        "text": "Set `spec.clusterIP: None` on the Service"
+      },
+      {
+        "id": "b",
+        "text": "Set `spec.type: NodePort` on the Service"
+      },
+      {
+        "id": "c",
+        "text": "Add `headless: true` under `metadata.labels`"
+      },
+      {
+        "id": "d",
+        "text": "Use an EndpointSlice without creating any Service"
+      }
+    ],
+    "correct_option": "a",
+    "explanation": "A headless Service is created by setting `clusterIP: None`. Kubernetes then returns pod IPs directly via DNS instead of allocating a virtual ClusterIP.",
+    "hints": [],
+    "setup_commands": [],
+    "default_namespace": "default",
+    "teardown_commands": []
+  },
+  {
+    "id": "cks-mcq-host-namespaces",
+    "title": "Avoid Host Namespace Exposure",
+    "category": "System Hardening",
+    "difficulty": "Medium",
+    "type": "mcq",
+    "weight": 2,
+    "description": "In a hardened cluster, which pod configuration most directly avoids exposing container workloads to the node's process and network namespaces unless absolutely required?",
+    "options": [
+      {
+        "id": "a",
+        "text": "Leave `hostPID`, `hostIPC`, and `hostNetwork` disabled"
+      },
+      {
+        "id": "b",
+        "text": "Set `dnsPolicy: ClusterFirstWithHostNet` on all pods"
+      },
+      {
+        "id": "c",
+        "text": "Mount `/proc` from the host as read-only"
+      },
+      {
+        "id": "d",
+        "text": "Run every pod with `privileged: true` so system tooling works"
+      }
+    ],
+    "correct_option": "a",
+    "explanation": "Hardening guidance is to avoid host namespace sharing unless a workload truly needs it. Enabling `hostPID`, `hostIPC`, or `hostNetwork` expands a pod's visibility and attack surface on the node.",
+    "hints": [],
+    "setup_commands": [],
+    "default_namespace": "default",
+    "teardown_commands": []
+  },
+  {
+    "id": "cks-mcq-protect-kernel-defaults",
+    "title": "Kubelet Protect Kernel Defaults",
+    "category": "System Hardening",
+    "difficulty": "Medium",
+    "type": "mcq",
+    "weight": 2,
+    "description": "Why would an operator enable `protectKernelDefaults: true` for the kubelet on a hardened node?",
+    "options": [
+      {
+        "id": "a",
+        "text": "To let pods overwrite host sysctl settings when they start"
+      },
+      {
+        "id": "b",
+        "text": "To fail kubelet startup if unsafe kernel defaults are detected instead of silently changing them"
+      },
+      {
+        "id": "c",
+        "text": "To encrypt all kernel logs before sending them to the API server"
+      },
+      {
+        "id": "d",
+        "text": "To disable cgroups for non-root containers"
+      }
+    ],
+    "correct_option": "b",
+    "explanation": "`protectKernelDefaults: true` prevents the kubelet from masking insecure node configuration drift by auto-adjusting kernel settings. That makes hardening gaps explicit and easier to enforce consistently.",
+    "hints": [],
+    "setup_commands": [],
+    "default_namespace": "default",
+    "teardown_commands": []
+  },
+  {
+    "id": "cks-mcq-encryption-config",
+    "title": "Encrypt Secrets at Rest",
+    "category": "Cluster Setup",
+    "difficulty": "Medium",
+    "type": "mcq",
+    "weight": 2,
+    "description": "Which kube-apiserver setting is used to enable encryption of Secret resources before they are written to etcd?",
+    "options": [
+      {
+        "id": "a",
+        "text": "`--service-account-key-file`"
+      },
+      {
+        "id": "b",
+        "text": "`--encryption-provider-config`"
+      },
+      {
+        "id": "c",
+        "text": "`--tls-cipher-suites`"
+      },
+      {
+        "id": "d",
+        "text": "`--authorization-mode=Node,RBAC`"
+      }
+    ],
+    "correct_option": "b",
+    "explanation": "The kube-apiserver uses the file referenced by `--encryption-provider-config` to decide which resources are encrypted at rest and which providers or keys are used.",
+    "hints": [],
+    "setup_commands": [],
+    "default_namespace": "default",
+    "teardown_commands": []
+  },
+  {
+    "id": "cks-mcq-image-signing",
+    "title": "Verify Signed Container Images",
+    "category": "Supply Chain Security",
+    "difficulty": "Medium",
+    "type": "mcq",
+    "weight": 2,
+    "description": "A cluster policy should allow workloads only when the container image signature is valid and trusted. Which tool is commonly used in modern Kubernetes supply chain workflows for signing and verifying OCI images?",
+    "options": [
+      {
+        "id": "a",
+        "text": "Cosign"
+      },
+      {
+        "id": "b",
+        "text": "Helm"
+      },
+      {
+        "id": "c",
+        "text": "CoreDNS"
+      },
+      {
+        "id": "d",
+        "text": "kube-proxy"
+      }
+    ],
+    "correct_option": "a",
+    "explanation": "Cosign is widely used to sign and verify OCI images and other artifacts. Admission policies can integrate image signature verification as part of supply chain enforcement.",
+    "hints": [],
+    "setup_commands": [],
+    "default_namespace": "default",
+    "teardown_commands": []
+  },
+  {
+    "id": "cks-mcq-image-digest",
+    "title": "Pin Images by Digest",
+    "category": "Supply Chain Security",
+    "difficulty": "Easy",
+    "type": "mcq",
+    "weight": 2,
+    "description": "Why is referencing a container image as `nginx@sha256:...` generally safer than using a floating tag such as `nginx:latest`?",
+    "options": [
+      {
+        "id": "a",
+        "text": "A digest guarantees the exact immutable image content that will be pulled"
+      },
+      {
+        "id": "b",
+        "text": "A digest automatically enables image signature verification"
+      },
+      {
+        "id": "c",
+        "text": "A digest forces the container to run as non-root"
+      },
+      {
+        "id": "d",
+        "text": "A digest can only be used with private registries"
+      }
+    ],
+    "correct_option": "a",
+    "explanation": "Image digests identify a specific immutable artifact. Tags can be moved to different image contents later, which makes deployments less predictable and weakens supply chain guarantees.",
+    "hints": [],
+    "setup_commands": [],
+    "default_namespace": "default",
+    "teardown_commands": []
+  },
+  {
+    "id": "cks-mcq-sbom",
+    "title": "Purpose of an SBOM",
+    "category": "Supply Chain Security",
+    "difficulty": "Easy",
+    "type": "mcq",
+    "weight": 2,
+    "description": "What is the main security value of generating an SBOM (Software Bill of Materials) for a container image?",
+    "options": [
+      {
+        "id": "a",
+        "text": "It replaces the need for vulnerability scanning entirely"
+      },
+      {
+        "id": "b",
+        "text": "It provides an inventory of included packages and dependencies for audit and risk analysis"
+      },
+      {
+        "id": "c",
+        "text": "It encrypts the image layers before the image is pushed"
+      },
+      {
+        "id": "d",
+        "text": "It prevents Kubernetes from pulling unsigned images"
+      }
+    ],
+    "correct_option": "b",
+    "explanation": "An SBOM documents what is inside the artifact, which helps vulnerability management, incident response, and compliance reviews. It complements scanning; it does not replace it.",
+    "hints": [],
+    "setup_commands": [],
+    "default_namespace": "default",
+    "teardown_commands": []
+  },
+  {
+    "id": "cks-mcq-default-deny-egress",
+    "title": "Default Deny Egress",
+    "category": "Network Security",
+    "difficulty": "Medium",
+    "type": "mcq",
+    "weight": 2,
+    "description": "Which Kubernetes resource is used to create a namespace policy that blocks outbound traffic from selected pods until specific egress destinations are allowed?",
+    "options": [
+      {
+        "id": "a",
+        "text": "A NetworkPolicy with `policyTypes: [Egress]`"
+      },
+      {
+        "id": "b",
+        "text": "A ServiceAccount with `automountServiceAccountToken: false`"
+      },
+      {
+        "id": "c",
+        "text": "An Ingress with no backend rules"
+      },
+      {
+        "id": "d",
+        "text": "A PodDisruptionBudget with `maxUnavailable: 0`"
+      }
+    ],
+    "correct_option": "a",
+    "explanation": "Outbound traffic restrictions in Kubernetes are expressed with NetworkPolicies using `Egress` rules. A default-deny egress baseline starts by selecting pods and omitting broad allow rules.",
+    "hints": [],
+    "setup_commands": [],
+    "default_namespace": "default",
+    "teardown_commands": []
   }
 ]

@@ -51,8 +51,7 @@ export default function ScenarioPanel({ scenario, onProgressUpdate, onScenarioSt
   async function runSetup() {
     setSetupState('running')
     try {
-      // Feature 2: teardown first to ensure clean cluster state
-      await fetch(`/api/scenarios/${scenario.id}/teardown`, { method: 'POST' }).catch(() => {})
+      // onScenarioStart runs teardown before setup (via App.jsx)
       await onScenarioStart?.(scenario.id)
       await fetch(`/api/scenarios/${scenario.id}/setup`, { method: 'POST' })
       setSetupState('done')
@@ -96,25 +95,9 @@ export default function ScenarioPanel({ scenario, onProgressUpdate, onScenarioSt
       navigator.clipboard.writeText(cmd).then(() => {
         setCopiedCmd(idx)
         setTimeout(() => setCopiedCmd(null), 1800)
-      })
-    } else {
-      const textArea = document.createElement("textarea")
-      textArea.value = cmd
-      textArea.style.position = "fixed"
-      textArea.style.left = "-999999px"
-      textArea.style.top = "-999999px"
-      document.body.appendChild(textArea)
-      textArea.focus()
-      textArea.select()
-      try {
-        document.execCommand('copy')
-        setCopiedCmd(idx)
-        setTimeout(() => setCopiedCmd(null), 1800)
-      } catch (err) {
-        console.error('Fallback copy failed', err)
-      }
-      textArea.remove()
+      }).catch(() => {})
     }
+    // execCommand fallback removed — deprecated and unsupported in modern browsers
   }
 
   if (!scenario) {
