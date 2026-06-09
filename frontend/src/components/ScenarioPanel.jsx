@@ -43,9 +43,6 @@ export default function ScenarioPanel({ scenario, onProgressUpdate, onScenarioSt
     setSelectedOption(null)
     setMcqResult(null)
     setHintsRevealed([])
-    if (scenario?.progress?.status === 'completed') {
-      setSetupState('done')
-    }
   }, [scenario?.id])
 
   async function runSetup() {
