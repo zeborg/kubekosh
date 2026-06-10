@@ -1273,11 +1273,7 @@
         "command": "cat <<EOF | kubectl apply -f -\napiVersion: v1\nkind: ResourceQuota\nmetadata:\n  name: compute-quota\n  namespace: team-quota\nspec:\n  hard:\n    pods: \"5\"\n    requests.cpu: \"1\"\n    requests.memory: \"500Mi\"\nEOF"
       }
     ],
-    "setup_commands": [
-      {
-        "command": "kubectl create namespace team-quota 2>/dev/null || true"
-      }
-    ],
+    "setup_commands": [],
     "validation": {
       "commands": [
         {
@@ -1300,7 +1296,7 @@
         }
       ]
     },
-    "default_namespace": "team-quota",
+    "default_namespace": "default",
     "teardown_commands": [
       {
         "command": "kubectl delete namespace team-quota --ignore-not-found --wait=false"
