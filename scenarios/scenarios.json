@@ -134,9 +134,9 @@
         "command": "cat <<EOF | kubectl apply -f -\napiVersion: v1\nkind: Pod\nmetadata:\n  name: config-reader\nspec:\n  containers:\n  - name: reader\n    image: busybox:1.36\n    command: [\"sleep\", \"3600\"]\n    volumeMounts:\n    - name: config-vol\n      mountPath: /etc/app-config\n  volumes:\n  - name: config-vol\n    configMap:\n      name: app-config\nEOF"
       },
       {
-        "title": "Apply and verify",
-        "body": "Apply the manifest and confirm files are visible inside the container.",
-        "command": "kubectl apply -f /tmp/config-reader.yaml && kubectl exec config-reader -- ls /etc/app-config"
+        "title": "Verify",
+        "body": "Confirm that the ConfigMap files are visible inside the container.",
+        "command": "kubectl exec config-reader -- ls /etc/app-config"
       }
     ],
     "setup_commands": [],
