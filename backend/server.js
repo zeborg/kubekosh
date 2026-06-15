@@ -2,6 +2,8 @@ const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const { execSync, exec } = require('child_process');
+const { promisify } = require('util');
+const execAsync = promisify(exec);
 const Database = require('better-sqlite3');
 
 const app = express();
@@ -96,14 +98,14 @@ function loadBundles() {
   return loadJsonDir(BUNDLES_DIR);
 }
 
-function runCommand(cmd, timeoutMs = 15000) {
+async function runCommand(cmd, timeoutMs = 15000) {
   try {
-    const output = execSync(cmd, {
+    const { stdout } = await execAsync(cmd, {
       timeout: timeoutMs,
       encoding: 'utf8',
       env: { ...process.env, KUBECONFIG: process.env.KUBECONFIG || '/root/.kube/config' }
-    }).trim();
-    return { success: true, output };
+    });
+    return { success: true, output: stdout.trim() };
   } catch (e) {
     return { success: false, output: (e.stdout || '').trim(), error: (e.stderr || e.message || '').trim() };
   }
@@ -236,14 +238,14 @@ app.post('/api/sessions/:id/abandon', (req, res) => {
 
 
 // POST /api/scenarios/:id/teardown — run teardown_commands
-app.post('/api/scenarios/:id/teardown', (req, res) => {
+app.post('/api/scenarios/:id/teardown', async (req, res) => {
   const scenarios = loadScenarios();
   const scenario = scenarios.find(s => s.id === req.params.id);
   if (!scenario) return res.status(404).json({ error: 'Scenario not found' });
   const results = [];
   for (const item of (scenario.teardown_commands || [])) {
     const cmd = item.command;
-    const result = runCommand(cmd, 30000);
+    const result = await runCommand(cmd, 30000);
     results.push({ command: cmd, ...result });
   }
   res.json({ ok: true, results });
@@ -252,7 +254,7 @@ app.post('/api/scenarios/:id/teardown', (req, res) => {
 // ── Context sync (Feature 3) ──────────────────────────────────────────────────
 
 // POST /api/scenarios/:id/context — inject namespace + banner into active terminals
-app.post('/api/scenarios/:id/context', (req, res) => {
+app.post('/api/scenarios/:id/context', async (req, res) => {
   const scenarios = loadScenarios();
   const scenario = scenarios.find(s => s.id === req.params.id);
   if (!scenario) return res.status(404).json({ error: 'Scenario not found' });
@@ -270,7 +272,7 @@ app.post('/api/scenarios/:id/context', (req, res) => {
   ].join('');
 
   // Set kubectl context namespace silently
-  runCommand(`kubectl config set-context --current --namespace=${ns}`, 5000);
+  await runCommand(`kubectl config set-context --current --namespace=${ns}`, 5000);
 
   // 1) Clear screen and write banner as terminal output (never touches shell stdin)
   injectToTerminal(clearScreen + banner);
@@ -332,7 +334,7 @@ app.get('/api/scenarios/:id', (req, res) => {
 });
 
 // POST /api/scenarios/:id/setup — run setup_commands for a scenario
-app.post('/api/scenarios/:id/setup', (req, res) => {
+app.post('/api/scenarios/:id/setup', async (req, res) => {
   const scenarios = loadScenarios();
   const scenario = scenarios.find(s => s.id === req.params.id);
   if (!scenario) return res.status(404).json({ error: 'Scenario not found' });
@@ -340,7 +342,7 @@ app.post('/api/scenarios/:id/setup', (req, res) => {
   const results = [];
   for (const item of (scenario.setup_commands || [])) {
     const cmd = item.command;
-    const result = runCommand(cmd, 30000);
+    const result = await runCommand(cmd, 30000);
     results.push({ command: cmd, ...result });
     if (!result.success) {
       // Non-fatal: setup commands like "kubectl create namespace" fail if already exists
@@ -364,7 +366,7 @@ app.post('/api/scenarios/:id/setup', (req, res) => {
 });
 
 // POST /api/scenarios/:id/validate — validate task-based scenario
-app.post('/api/scenarios/:id/validate', (req, res) => {
+app.post('/api/scenarios/:id/validate', async (req, res) => {
   const scenarios = loadScenarios();
   const scenario = scenarios.find(s => s.id === req.params.id);
   if (!scenario) return res.status(404).json({ error: 'Scenario not found' });
@@ -374,7 +376,7 @@ app.post('/api/scenarios/:id/validate', (req, res) => {
   let allPassed = true;
 
   for (const check of (scenario.validation?.commands || [])) {
-    const result = runCommand(check.command, 5000);
+    const result = await runCommand(check.command, 5000);
     // Prefer stdout. Only fall back to stderr for non-API errors:
     // - kubectl auth can-i prints "yes"/"no" to stdout → already in result.output.
     // - kubectl get <missing-resource> prints "Error from server (NotFound):" to stderr
@@ -465,8 +467,8 @@ app.post('/api/progress/reset/:id', (req, res) => {
 });
 
 // GET /api/health
-app.get('/api/health', (req, res) => {
-  const kube = runCommand('kubectl cluster-info --request-timeout=3s 2>&1 | head -1');
+app.get('/api/health', async (req, res) => {
+  const kube = await runCommand('kubectl cluster-info --request-timeout=3s 2>&1 | head -1');
   res.json({ api: 'ok', cluster: kube.success ? 'ready' : 'not_ready', cluster_info: kube.output });
 });
 
