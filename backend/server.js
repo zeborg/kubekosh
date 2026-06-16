@@ -1,7 +1,7 @@
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
-const { execSync, exec } = require('child_process');
+const { exec } = require('child_process');
 const { promisify } = require('util');
 const execAsync = promisify(exec);
 const Database = require('better-sqlite3');
@@ -33,6 +33,28 @@ function getDb() {
       completed_at  TEXT
     )
   `);
+
+  // Run dynamic schema migrations to add missing columns to the progress table
+  try {
+    const tableInfo = _db.prepare("PRAGMA table_info(progress)").all();
+    const existingColumns = tableInfo.map(col => col.name);
+    
+    const requiredColumns = [
+      { name: 'started_at', type: 'TEXT' },
+      { name: 'notes', type: 'TEXT' },
+      { name: 'time_spent_seconds', type: 'INTEGER' }
+    ];
+    
+    for (const col of requiredColumns) {
+      if (!existingColumns.includes(col.name)) {
+        console.log(`Migrating progress database schema: Adding column '${col.name}' (${col.type})`);
+        _db.exec(`ALTER TABLE progress ADD COLUMN ${col.name} ${col.type}`);
+      }
+    }
+  } catch (e) {
+    console.error('Failed to run schema migrations on progress table:', e.message);
+  }
+
   _db.exec(`
     CREATE TABLE IF NOT EXISTS sessions (
       id            TEXT PRIMARY KEY,
@@ -56,6 +78,9 @@ function loadProgress() {
       attempts: r.attempts,
       last_validated: r.last_validated,
       completed_at: r.completed_at,
+      started_at: r.started_at || null,
+      notes: r.notes || null,
+      time_spent_seconds: r.time_spent_seconds || 0
     }]));
   } catch { return {}; }
 }
@@ -64,17 +89,29 @@ function saveProgress(progress) {
   try {
     const db = getDb();
     const upsert = db.prepare(`
-      INSERT INTO progress (scenario_id, status, attempts, last_validated, completed_at)
-      VALUES (?, ?, ?, ?, ?)
+      INSERT INTO progress (scenario_id, status, attempts, last_validated, completed_at, started_at, notes, time_spent_seconds)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(scenario_id) DO UPDATE SET
         status = excluded.status,
         attempts = excluded.attempts,
         last_validated = excluded.last_validated,
-        completed_at = excluded.completed_at
+        completed_at = excluded.completed_at,
+        started_at = excluded.started_at,
+        notes = excluded.notes,
+        time_spent_seconds = excluded.time_spent_seconds
     `);
     const tx = db.transaction((entries) => {
       for (const [id, p] of entries) {
-        upsert.run(id, p.status, p.attempts || 0, p.last_validated || null, p.completed_at || null);
+        upsert.run(
+          id,
+          p.status || null,
+          p.attempts || 0,
+          p.last_validated || null,
+          p.completed_at || null,
+          p.started_at || null,
+          p.notes || null,
+          p.time_spent_seconds || 0
+        );
       }
     });
     tx(Object.entries(progress));
@@ -166,20 +203,27 @@ function refreshPrompt(delayMs = 80) {
 app.post('/api/progress/reset', (req, res) => {
   const { scope, scenarioId, category, bundleId } = req.body;
   const db = getDb();
-  const del = db.prepare('DELETE FROM progress WHERE scenario_id = ?');
+  const resetProgressStmt = db.prepare(`
+    UPDATE progress 
+    SET status = 'not_started', 
+        attempts = 0, 
+        completed_at = NULL, 
+        last_validated = NULL 
+    WHERE scenario_id = ?
+  `);
 
   try {
     if (scope === 'scenario') {
-      del.run(scenarioId);
+      resetProgressStmt.run(scenarioId);
     } else if (scope === 'category') {
       const scenarios = loadScenarios();
       const ids = scenarios.filter(s => s.category === category).map(s => s.id);
-      const tx = db.transaction(ids => ids.forEach(id => del.run(id)));
+      const tx = db.transaction(ids => ids.forEach(id => resetProgressStmt.run(id)));
       tx(ids);
     } else if (scope === 'bundle') {
       const bundle = loadBundles().find(b => b.id === bundleId);
       if (!bundle) return res.status(404).json({ error: 'Bundle not found' });
-      const tx = db.transaction(ids => ids.forEach(id => del.run(id)));
+      const tx = db.transaction(ids => ids.forEach(id => resetProgressStmt.run(id)));
       tx(bundle.scenario_ids);
     } else {
       return res.status(400).json({ error: 'Invalid scope' });
@@ -241,15 +285,33 @@ app.post('/api/sessions/:id/submit', (req, res) => {
   db.prepare(`UPDATE sessions SET status='submitted', submitted_at=datetime('now'),
               duration_secs=?, snapshot=? WHERE id=?`)
     .run(durationSecs, JSON.stringify(snapshot), req.params.id);
+
+  // Reset timers of all scenarios in this bundle
+  const clearTimer = db.prepare(`UPDATE progress SET started_at = NULL, time_spent_seconds = 0 WHERE scenario_id = ?`);
+  const tx = db.transaction(ids => ids.forEach(id => clearTimer.run(id)));
+  tx(bundle.scenario_ids);
+
   res.json({ ok: true, snapshot, durationSecs });
 });
 
 // POST /api/sessions/:id/abandon — forfeit the exam without a score report
 app.post('/api/sessions/:id/abandon', (req, res) => {
   const db = getDb();
-  const result = db.prepare(`UPDATE sessions SET status='abandoned', submitted_at=datetime('now')
+  const session = db.prepare('SELECT * FROM sessions WHERE id = ?').get(req.params.id);
+  if (!session) return res.status(404).json({ error: 'Session not found' });
+  const bundles = loadBundles();
+  const bundle = bundles.find(b => b.id === session.bundle_id);
+
+  db.prepare(`UPDATE sessions SET status='abandoned', submitted_at=datetime('now')
                              WHERE id=? AND status='active'`).run(req.params.id);
-  res.json({ ok: true, changed: result.changes });
+
+  if (bundle) {
+    const clearTimer = db.prepare(`UPDATE progress SET started_at = NULL, time_spent_seconds = 0 WHERE scenario_id = ?`);
+    const tx = db.transaction(ids => ids.forEach(id => clearTimer.run(id)));
+    tx(bundle.scenario_ids);
+  }
+
+  res.json({ ok: true });
 });
 
 
@@ -457,6 +519,33 @@ app.post('/api/scenarios/:id/answer', (req, res) => {
   });
 });
 
+// POST /api/scenarios/:id/time — update time spent on a scenario
+app.post('/api/scenarios/:id/time', (req, res) => {
+  const { time_spent_seconds } = req.body;
+  if (typeof time_spent_seconds !== 'number') {
+    return res.status(400).json({ error: 'Invalid time_spent_seconds' });
+  }
+  const db = getDb();
+  const activeSession = db.prepare("SELECT 1 FROM sessions WHERE status='active'").get();
+  if (!activeSession) {
+    return res.json({ ok: true, message: 'No active session' });
+  }
+  const progress = loadProgress();
+  if (!progress[req.params.id]) {
+    progress[req.params.id] = {
+      status: 'in_progress',
+      attempts: 0,
+      started_at: new Date().toISOString(),
+      time_spent_seconds: 0
+    };
+  } else if (!progress[req.params.id].started_at) {
+    progress[req.params.id].started_at = new Date().toISOString();
+  }
+  progress[req.params.id].time_spent_seconds = time_spent_seconds;
+  saveProgress(progress);
+  res.json({ ok: true });
+});
+
 // GET /api/progress — full progress summary
 app.get('/api/progress', (req, res) => {
   const scenarios = loadScenarios();
@@ -476,10 +565,20 @@ app.get('/api/progress', (req, res) => {
 
 // POST /api/progress/reset/:id — reset a scenario
 app.post('/api/progress/reset/:id', (req, res) => {
-  const progress = loadProgress();
-  delete progress[req.params.id];
-  saveProgress(progress);
-  res.json({ ok: true });
+  try {
+    const db = getDb();
+    db.prepare(`
+      UPDATE progress 
+      SET status = 'not_started', 
+          attempts = 0, 
+          completed_at = NULL, 
+          last_validated = NULL 
+      WHERE scenario_id = ?
+    `).run(req.params.id);
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // POST /api/cache/reload — reload scenarios and bundles cache

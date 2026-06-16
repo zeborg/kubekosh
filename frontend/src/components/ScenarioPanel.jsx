@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import styles from './ScenarioPanel.module.css'
@@ -34,6 +34,7 @@ export default function ScenarioPanel({ scenario, onProgressUpdate, onScenarioSt
   const [submitting, setSubmitting] = useState(false)
   const [hintsRevealed, setHintsRevealed] = useState([])
   const [copiedCmd, setCopiedCmd] = useState(null)
+  const [localTimeSpent, setLocalTimeSpent] = useState(0)
 
   // Reset state when scenario changes
   useEffect(() => {
@@ -44,6 +45,70 @@ export default function ScenarioPanel({ scenario, onProgressUpdate, onScenarioSt
     setMcqResult(null)
     setHintsRevealed([])
   }, [scenario?.id])
+
+  const timeSpentRef = useRef(0)
+  const lastScenarioIdRef = useRef(null)
+
+  // Sync ref with prop on scenario change (or when prop changes externally)
+  useEffect(() => {
+    const propTime = scenario?.progress?.time_spent_seconds || 0
+    if (lastScenarioIdRef.current !== scenario?.id) {
+      lastScenarioIdRef.current = scenario?.id
+      timeSpentRef.current = propTime
+      setLocalTimeSpent(propTime)
+    } else if (propTime > timeSpentRef.current) {
+      timeSpentRef.current = propTime
+      setLocalTimeSpent(propTime)
+    }
+  }, [scenario?.id, scenario?.progress?.time_spent_seconds])
+
+  const prevIsExamModeRef = useRef(isExamMode)
+
+  // Reset timer state if we exit exam mode
+  useEffect(() => {
+    if (prevIsExamModeRef.current && !isExamMode) {
+      timeSpentRef.current = 0
+      setLocalTimeSpent(0)
+    }
+    prevIsExamModeRef.current = isExamMode
+  }, [isExamMode])
+
+  useEffect(() => {
+    if (!isExamMode || !scenario || scenario.progress?.status === 'completed') return
+
+    // Begin tracking immediately: if progress database has no started_at record yet, initialize it
+    if (!scenario.progress?.started_at) {
+      fetch(`/api/scenarios/${scenario.id}/time`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ time_spent_seconds: timeSpentRef.current })
+      }).then(() => {
+        onProgressUpdate?.()
+      }).catch(() => {})
+    }
+
+    const timer = setInterval(() => {
+      timeSpentRef.current += 1
+      setLocalTimeSpent(timeSpentRef.current)
+      if (timeSpentRef.current % 10 === 0) {
+        fetch(`/api/scenarios/${scenario.id}/time`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ time_spent_seconds: timeSpentRef.current })
+        }).catch(() => {})
+      }
+    }, 1000)
+
+    return () => {
+      clearInterval(timer)
+      fetch(`/api/scenarios/${scenario.id}/time`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ time_spent_seconds: timeSpentRef.current }),
+        keepalive: true
+      }).catch(() => {})
+    }
+  }, [scenario?.id, scenario?.progress?.status, isExamMode, onProgressUpdate])
 
   async function runSetup() {
     setSetupState('running')
@@ -140,6 +205,28 @@ export default function ScenarioPanel({ scenario, onProgressUpdate, onScenarioSt
         </div>
         <div className={styles.titleRow}>
           <div className={styles.scenarioTitle}>{scenario.title}</div>
+          {isExamMode && scenario.progress?.started_at && (
+            <div className={styles.progressStats}>
+              <div className={styles.statItem}>
+                <span className={styles.statLabel}>Started:</span>
+                <span className={styles.statVal}>
+                  {new Date(scenario.progress.started_at).toLocaleString()}
+                </span>
+              </div>
+              <span className={styles.statSeparator}>•</span>
+              <div className={styles.statItem}>
+                <span className={styles.statLabel}>Time Spent:</span>
+                <span className={styles.statVal}>
+                  {(() => {
+                    const m = Math.floor(localTimeSpent / 60)
+                    const s = localTimeSpent % 60
+                    if (m > 0) return `${m}m ${s}s`
+                    return `${s}s`
+                  })()}
+                </span>
+              </div>
+            </div>
+          )}
           {scenario.progress?.status !== 'not_started' && scenario.progress?.attempts > 0 && (
             <button
               className={styles.resetBtn}

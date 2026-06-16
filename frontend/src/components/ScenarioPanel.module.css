@@ -103,7 +103,8 @@
   font-weight: 700;
   padding: 5px 12px;
   cursor: pointer;
-  margin-top: 2px;
+  margin-top: 0;
+  align-self: center;
   white-space: nowrap;
   letter-spacing: 0.2px;
   transition: color 0.12s, border-color 0.12s, background 0.12s;
@@ -514,3 +515,41 @@
 
 @keyframes fadeIn { from{opacity:0;transform:translateY(4px)} to{opacity:1;transform:none} }
 @keyframes spin { to{transform:rotate(360deg)} }
+
+.progressStats {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  width: fit-content;
+  align-self: center;
+  flex-shrink: 0;
+}
+
+.statItem {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.statLabel {
+  color: var(--text-3);
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 10px;
+  letter-spacing: 0.5px;
+}
+
+.statVal {
+  color: var(--text-2);
+  font-family: var(--mono);
+}
+
+.statSeparator {
+  color: var(--border2);
+  font-size: 10px;
+}

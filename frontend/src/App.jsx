@@ -82,7 +82,12 @@ export default function App() {
   useEffect(() => {
     fetch('/api/sessions/active')
       .then(r => r.json())
-      .then(s => { if (s) setExamSession(s) })
+      .then(s => {
+        if (s) {
+          setExamSession(s)
+          setActiveBundleId(s.bundle_id)
+        }
+      })
       .catch(() => { })
   }, [])
 
@@ -166,13 +171,15 @@ export default function App() {
     const bundle = bundles.find(b => b.id === examSession.bundle_id)
     setExamReport({ ...result, bundle })
     setExamSession(null)
-  }, [examSession, bundles])
+    refreshProgress()
+  }, [examSession, bundles, refreshProgress])
 
   const abandonExam = useCallback(async () => {
     if (!examSession) return
     await fetch(`/api/sessions/${examSession.id}/abandon`, { method: 'POST' }).catch(() => { })
     setExamSession(null)
-  }, [examSession])
+    refreshProgress()
+  }, [examSession, refreshProgress])
 
   // ── Teardown when restarting a scenario (Feature 2) ───────────────────────
   const handleScenarioStart = useCallback(async (scenarioId) => {
