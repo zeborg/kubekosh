@@ -8,9 +8,14 @@
   "description": "## Copy Files Between Containers and the Cluster\n\nThe `kubectl cp` command allows you to copy files and directories to and from running containers.\n\n**Your task:**\n\nA pod named `config-pod` is running with a file at `/src/config.json`. Copy it **into** the same pod at `/app/config.json` using `kubectl cp`.\n\n> Tip: `kubectl cp` syntax is `kubectl cp <source> <pod>:<dest>`",
   "hints": [
     {
-      "title": "Use kubectl cp",
-      "body": "First copy the file out from /src, then copy it back to /app, or use kubectl exec to verify.",
+      "title": "Method 1: Use kubectl cp (via local machine)",
+      "body": "Copy the file from /src to the local machine, then upload it back to /app using kubectl cp.",
       "command": "kubectl cp config-pod:/src/config.json /tmp/config.json && kubectl cp /tmp/config.json config-pod:/app/config.json"
+    },
+    {
+      "title": "Method 2: Use exec and cp (direct copy inside container)",
+      "body": "Use the cp command inside the container with exec.",
+      "command": "kubectl exec pods/config-pod -- cp /src/config.json /app/config.json"
     }
   ],
   "setup_commands": [
