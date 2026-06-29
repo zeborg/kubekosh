@@ -13,6 +13,7 @@ const path = require('path');
 
 const STATUSES = [
   'available',
+  'queued',
   'installing',
   'installed',
   'removing',
@@ -102,6 +103,14 @@ function reconcileInterrupted(state, ts = new Date().toISOString()) {
         ...entry,
         status: 'remove_failed',
         last_error: 'interrupted during removal (container restart)',
+        updated_at: ts
+      };
+    } else if (entry.status === 'queued') {
+      // Job never started before the restart — drop back to its resting state.
+      next[id] = {
+        ...entry,
+        status: entry.queued_action === 'remove' ? 'installed' : 'available',
+        last_error: null,
         updated_at: ts
       };
     } else {

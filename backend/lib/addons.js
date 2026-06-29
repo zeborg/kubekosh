@@ -88,6 +88,9 @@ function validateManifest(raw, dirName = null) {
   if (raw.arch_support != null && !Array.isArray(raw.arch_support)) {
     errors.push('arch_support must be an array');
   }
+  if (raw.logo != null && typeof raw.logo !== 'string') {
+    errors.push('logo must be a string (URL)');
+  }
 
   return { valid: errors.length === 0, errors };
 }
@@ -103,6 +106,7 @@ function normalizeManifest(raw) {
     description: raw.description,
     category: raw.category,
     icon: raw.icon || '📦',
+    logo: typeof raw.logo === 'string' && raw.logo ? raw.logo : null,
     target: raw.target,
     version: raw.version,
     docs_url: raw.docs_url || null,

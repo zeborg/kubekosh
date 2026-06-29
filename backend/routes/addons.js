@@ -23,7 +23,10 @@ function mergeStatus(addon, state) {
     status: entry.status || 'available',
     installed_version: entry.version || null,
     last_error: entry.last_error || null,
-    updated_at: entry.updated_at || null
+    updated_at: entry.updated_at || null,
+    queued_action: entry.queued_action || null,
+    // Remote logo URL from the manifest; null → UI falls back to the emoji icon.
+    logo_url: addon.logo || null
   };
 }
 
@@ -36,12 +39,16 @@ function buildInstallPlan(id, index, state) {
     const order = resolveInstallOrder(id, index);
     const steps = order.map((depId) => {
       const status = statusOf(state, depId);
-      const action = status === 'installed' ? 'skip' : 'install';
-      return { id: depId, name: index.get(depId).name, status, action };
+      const installedVer = state[depId]?.version ?? null;
+      const manifestVer = index.get(depId).version;
+      const upToDate = status === 'installed' && installedVer === manifestVer;
+      // installed-but-outdated → upgrade; not installed → install; else skip.
+      const action = upToDate ? 'skip' : (status === 'installed' ? 'upgrade' : 'install');
+      return { id: depId, name: index.get(depId).name, status, action, installed_version: installedVer, version: manifestVer };
     });
     return {
       order: steps,
-      to_install: steps.filter((s) => s.action === 'install').length,
+      to_install: steps.filter((s) => s.action !== 'skip').length,
       already_satisfied: steps.filter((s) => s.action === 'skip').map((s) => s.id)
     };
   } catch (e) {
@@ -110,6 +117,14 @@ function createAddonsRouter({ loadAddons, stateFile, engine }) {
       const r = engine.enqueueRemove(req.params.id);
       if (r.error) return res.type('application/json').status(r.code || 400).json({ error: r.error, dependents: r.dependents });
       res.type('application/json').status(202).json({ accepted: true, jobId: r.jobId });
+    });
+
+    // POST /api/addons/:id/cancel — cancel an in-progress install and revert it
+    router.post('/:id/cancel', (req, res) => {
+      if (!validId(req, res)) return;
+      const r = engine.cancel(req.params.id);
+      if (r.error) return res.type('application/json').status(r.code || 400).json({ error: r.error });
+      res.type('application/json').status(202).json({ accepted: true, reverting: r.reverting });
     });
 
     // GET /api/addons/:id/status — polling fallback

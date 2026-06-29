@@ -24,10 +24,14 @@ function substitute(cmd, vars) {
   return cmd.replace(/\$\{(\w+)\}/g, (m, k) => (k in vars ? vars[k] : m));
 }
 
-function createJobEngine({ loadAddons, stateFile, binDir = '/data/addons/bin', baseEnv = process.env }) {
+function createJobEngine({ loadAddons, stateFile, binDir = '/data/addons/bin', baseEnv = process.env, retryIntervalMs = 60000 }) {
   let state = readState(stateFile);
   const queue = [];
   let running = false;
+  let sweeping = false;
+  let currentJob = null;        // job presently executing (for cancellation)
+  let currentChild = null;      // its running child process (to kill on cancel)
+  const operations = new Map(); // rootId -> { plan: string[] } for active installs
 
   const subscribers = new Map(); // streamKey -> Set<res>
   const buffers = new Map();     // streamKey -> { id, event, data }[]
@@ -46,6 +50,13 @@ function createJobEngine({ loadAddons, stateFile, binDir = '/data/addons/bin', b
   function persist() {
     try { writeState(stateFile, state); }
     catch (e) { console.error('addon state persist failed:', e.message); }
+  }
+
+  // An addon needs (re)installing if it isn't installed, or the installed
+  // version differs from the manifest's — i.e. an in-place upgrade/downgrade.
+  function needsInstall(id, manifest) {
+    if (statusOf(state, id) !== 'installed') return true;
+    return (state[id]?.version ?? null) !== manifest.version;
   }
 
   // ── SSE plumbing ───────────────────────────────────────────────────────────
@@ -87,17 +98,28 @@ function createJobEngine({ loadAddons, stateFile, binDir = '/data/addons/bin', b
     });
   }
 
+  // Kill a child and the whole process group it leads (so SIGKILL also stops
+  // curl/kubectl/etc. spawned by the bash command, not just bash itself).
+  function killTree(child, signal) {
+    if (!child) return;
+    try { process.kill(-child.pid, signal); }
+    catch { try { child.kill(signal); } catch { /* already gone */ } }
+  }
+
   // ── command execution ──────────────────────────────────────────────────────
-  function runCmd(command, { keys, addonId, timeoutMs }) {
+  function runCmd(command, { keys, addonId, timeoutMs, onChild }) {
     return new Promise((resolve, reject) => {
-      const child = spawn('bash', ['-lc', command], { env: runEnv() });
+      // detached:true makes the child a process-group leader so killTree can
+      // signal the entire group.
+      const child = spawn('bash', ['-lc', command], { env: runEnv(), detached: true });
+      if (onChild) onChild(child);
       let settled = false;
       const buffers = { stdout: '', stderr: '' };
 
       const timer = setTimeout(() => {
         if (settled) return;
         settled = true;
-        child.kill('SIGKILL');
+        killTree(child, 'SIGKILL');
         reject(new Error(`command timed out after ${Math.round(timeoutMs / 1000)}s`));
       }, timeoutMs);
 
@@ -142,29 +164,40 @@ function createJobEngine({ loadAddons, stateFile, binDir = '/data/addons/bin', b
       : [job.addonId];
     const isInstall = job.action === 'install';
 
-    // Idempotency: skip an install whose addon is already installed.
-    if (isInstall && statusOf(state, job.addonId) === 'installed') return;
+    // Idempotency: skip an install only when the addon is already at this
+    // version. A version mismatch falls through and re-runs setup (upgrade).
+    if (isInstall && !needsInstall(job.addonId, addon)) return;
 
     setAddonStatus(job.addonId, { status: isInstall ? 'installing' : 'removing', last_error: null }, keys);
 
     const cmds = isInstall ? addon.setup_commands : addon.teardown_commands;
     const vars = { VERSION: addon.version, ARCH: detectArch(), ADDON_BIN: binDir };
     const timeoutMs = (addon.est_seconds || 60) * 3 * 1000;
+    const onChild = (c) => { currentChild = c; };
 
     try {
       for (const c of cmds) {
+        if (job.aborted) throw new Error('canceled');
         broadcastLog(keys, job.addonId, `$ ${c.label || c.command}`, 'meta');
-        await runCmd(substitute(c.command, vars), { keys, addonId: job.addonId, timeoutMs });
+        await runCmd(substitute(c.command, vars), { keys, addonId: job.addonId, timeoutMs, onChild });
       }
 
       if (isInstall) {
+        if (job.aborted) throw new Error('canceled');
         broadcastLog(keys, job.addonId, '$ verifying health', 'meta');
-        await runCmd(substitute(addon.health_command, vars), { keys, addonId: job.addonId, timeoutMs: HEALTH_TIMEOUT_MS });
+        await runCmd(substitute(addon.health_command, vars), { keys, addonId: job.addonId, timeoutMs: HEALTH_TIMEOUT_MS, onChild });
         setAddonStatus(job.addonId, { status: 'installed', version: addon.version, last_error: null }, keys);
+        if (job.addonId === job.rootId) operations.delete(job.rootId);
       } else {
         setAddonStatus(job.addonId, { status: 'available', version: null, last_error: null }, keys);
       }
     } catch (e) {
+      // Cancellation: don't mark failed — a revert (teardown) job is already
+      // queued to undo any partial changes and return it to 'available'.
+      if (job.aborted) {
+        broadcastLog(keys, job.addonId, '✗ canceled — reverting changes', 'meta');
+        return;
+      }
       const failStatus = isInstall ? 'install_failed' : 'remove_failed';
       setAddonStatus(job.addonId, { status: failStatus, last_error: e.message }, keys);
       broadcastLog(keys, job.addonId, `✗ ${e.message}`, 'meta');
@@ -179,6 +212,7 @@ function createJobEngine({ loadAddons, stateFile, binDir = '/data/addons/bin', b
           last_error: `dependency "${job.addonId}" failed: ${e.message}`
         }, [job.rootId]);
       }
+      if (isInstall) operations.delete(job.rootId);
     }
   }
 
@@ -187,7 +221,10 @@ function createJobEngine({ loadAddons, stateFile, binDir = '/data/addons/bin', b
     running = true;
     try {
       while (queue.length) {
-        await runJob(queue.shift());
+        currentJob = queue.shift();
+        currentChild = null;
+        try { await runJob(currentJob); }
+        finally { currentJob = null; currentChild = null; }
       }
     } finally {
       running = false;
@@ -204,15 +241,56 @@ function createJobEngine({ loadAddons, stateFile, binDir = '/data/addons/bin', b
     try { order = resolveInstallOrder(rootId, index); }
     catch (e) { return { error: e.message, code: 400 }; }
 
-    const pending = order.filter(id => statusOf(state, id) !== 'installed');
+    // Skip anything already in flight (queued or running) so re-clicks and
+    // overlapping installs don't enqueue the same addon twice.
+    const inFlight = (id) => ['queued', 'installing', 'removing'].includes(statusOf(state, id));
+    const pending = order.filter(id => needsInstall(id, index.get(id)) && !inFlight(id));
     if (pending.length === 0) {
-      return { error: 'addon and all dependencies are already installed', code: 409 };
+      return { error: 'addon and all dependencies are already installed or in progress', code: 409 };
     }
+    // Start each operation with a clean log buffer so a (re)connecting client
+    // replays only the current run's output, not stale output from prior runs.
+    buffers.delete(rootId);
+    for (const id of pending) buffers.delete(id);
+    // Track the operation so it can be cancelled (and its addons reverted).
+    operations.set(rootId, { plan: [...pending] });
     for (const id of pending) {
+      // Mark queued immediately so the UI shows pending state while the
+      // single-concurrency queue works through earlier jobs.
+      const keys = id !== rootId ? [id, rootId] : [id];
+      setAddonStatus(id, { status: 'queued', queued_action: 'install', last_error: null }, keys);
       queue.push({ addonId: id, action: 'install', rootId });
     }
-    drain();
+    drain().catch(e => console.error('addon drain failed:', e && e.message));
     return { accepted: true, jobId: rootId, plan: pending };
+  }
+
+  // Cancel an in-progress install: drop its queued jobs, kill the running
+  // command, and queue idempotent teardown (revert) jobs to undo any changes
+  // made so far, returning every touched addon to 'available'.
+  function cancel(rootId) {
+    const op = operations.get(rootId);
+    if (!op) return { error: 'no active installation to cancel', code: 409 };
+    operations.delete(rootId);
+
+    // 1. Drop not-yet-started jobs belonging to this operation.
+    for (let i = queue.length - 1; i >= 0; i--) {
+      if (queue[i].rootId === rootId) queue.splice(i, 1);
+    }
+    // 2. Abort + hard-kill the running job if it belongs to this operation.
+    if (currentJob && currentJob.rootId === rootId) {
+      currentJob.aborted = true;
+      killTree(currentChild, 'SIGKILL');
+    }
+    // 3. Revert each touched addon (root first, then deps). teardown_commands
+    //    are idempotent, so they undo full or partial installs and no-op
+    //    otherwise. Logs append to the existing stream for continuity.
+    const revert = [...op.plan].reverse();
+    for (const id of revert) {
+      queue.push({ addonId: id, action: 'remove', rootId });
+    }
+    drain().catch(e => console.error('addon drain failed:', e && e.message));
+    return { accepted: true, reverting: revert };
   }
 
   function enqueueRemove(id) {
@@ -225,13 +303,16 @@ function createJobEngine({ loadAddons, stateFile, binDir = '/data/addons/bin', b
     }
     const blockers = getDependents(id, addons).filter(d => {
       const ds = statusOf(state, d);
-      return ds === 'installed' || ds === 'installing';
+      return ds === 'installed' || ds === 'installing' || ds === 'queued';
     });
     if (blockers.length > 0) {
       return { error: 'addon is required by other installed addons', code: 409, dependents: blockers };
     }
+    // Clean buffer so the client doesn't replay the prior install's output.
+    buffers.delete(id);
+    setAddonStatus(id, { status: 'queued', queued_action: 'remove', last_error: null }, [id]);
     queue.push({ addonId: id, action: 'remove', rootId: id });
-    drain();
+    drain().catch(e => console.error('addon drain failed:', e && e.message));
     return { accepted: true, jobId: id };
   }
 
@@ -271,29 +352,78 @@ function createJobEngine({ loadAddons, stateFile, binDir = '/data/addons/bin', b
     return { status: statusOf(state, id), last_error: state[id]?.last_error ?? null };
   }
 
+  // Promote an addon stuck in install_failed whose health check now passes —
+  // e.g. a cluster addon whose readiness wait timed out on a cold node but came
+  // up moments later. Probes health; flips to installed on success, leaves it
+  // failed otherwise. Returns true if it promoted.
+  async function promoteIfHealthy(id) {
+    if (statusOf(state, id) !== 'install_failed') return false;
+    const addon = buildIndex(loadAddons()).get(id);
+    if (!addon) return false;
+    const vars = { VERSION: addon.version, ARCH: detectArch(), ADDON_BIN: binDir };
+    try {
+      await runCmd(substitute(addon.health_command, vars), { keys: [id], addonId: id, timeoutMs: HEALTH_TIMEOUT_MS });
+    } catch {
+      return false; // still not healthy — leave it failed
+    }
+    // A real job may have changed the status while the probe ran; re-check.
+    if (statusOf(state, id) !== 'install_failed') return false;
+    console.log(`Addon "${id}" is healthy despite an earlier failure — marking installed.`);
+    setAddonStatus(id, { status: 'installed', version: addon.version, last_error: null }, [id]);
+    return true;
+  }
+
+  // Sweep every install_failed addon and auto-promote the ones now healthy.
+  // Re-entrant-guarded; safe to call from the boot reconcile and the timer.
+  async function sweepFailed() {
+    if (sweeping) return;
+    sweeping = true;
+    try {
+      for (const [id, entry] of Object.entries(state)) {
+        if (entry.status === 'install_failed') await promoteIfHealthy(id);
+      }
+    } finally {
+      sweeping = false;
+    }
+  }
+
   // Best-effort: re-install addons marked installed whose health check now
-  // fails (e.g. an OS binary lost when an ephemeral container restarted).
+  // fails (e.g. an OS binary lost when an ephemeral container restarted), and
+  // auto-promote install_failed addons that are actually healthy.
   // Runs in the background; never blocks startup.
   async function healthReconcile() {
-    const addons = loadAddons();
-    const index = buildIndex(addons);
+    const index = buildIndex(loadAddons());
     for (const [id, entry] of Object.entries(state)) {
-      if (entry.status !== 'installed') continue;
       const addon = index.get(id);
       if (!addon) continue;
-      const vars = { VERSION: addon.version, ARCH: detectArch(), ADDON_BIN: binDir };
-      try {
-        await runCmd(substitute(addon.health_command, vars), { keys: [id], addonId: id, timeoutMs: HEALTH_TIMEOUT_MS });
-      } catch {
-        console.log(`Addon "${id}" failed health check on boot — re-installing.`);
-        state = setStatus(state, id, { status: 'available', version: null });
-        persist();
-        enqueueInstall(id);
+      if (entry.status === 'installed') {
+        const vars = { VERSION: addon.version, ARCH: detectArch(), ADDON_BIN: binDir };
+        try {
+          await runCmd(substitute(addon.health_command, vars), { keys: [id], addonId: id, timeoutMs: HEALTH_TIMEOUT_MS });
+        } catch {
+          console.log(`Addon "${id}" failed health check on boot — re-installing.`);
+          state = setStatus(state, id, { status: 'available', version: null });
+          persist();
+          enqueueInstall(id);
+        }
+      } else if (entry.status === 'install_failed') {
+        await promoteIfHealthy(id);
       }
     }
   }
 
-  return { enqueueInstall, enqueueRemove, subscribe, getStatus, healthReconcile };
+  // Periodic auto-promotion of failed-but-healthy addons. unref() so it never
+  // keeps the process (or a test runner) alive on its own.
+  const retryTimer = retryIntervalMs > 0
+    ? setInterval(() => { sweepFailed().catch(() => {}); }, retryIntervalMs)
+    : null;
+  if (retryTimer && retryTimer.unref) retryTimer.unref();
+
+  function stopRetryTimer() {
+    if (retryTimer) clearInterval(retryTimer);
+  }
+
+  return { enqueueInstall, enqueueRemove, cancel, subscribe, getStatus, healthReconcile, sweepFailed, stopRetryTimer };
 }
 
 module.exports = { createJobEngine, substitute };

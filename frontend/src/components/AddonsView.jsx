@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import styles from './AddonsView.module.css'
 import { useAddons } from './useAddons'
 import { statusMeta } from './addonStatus'
@@ -14,6 +14,7 @@ export default function AddonsView({ onClose }) {
   const [selectedId, setSelectedId] = useState(null)
   const [category, setCategory] = useState(ALL)
   const [status, setStatus] = useState(ALL)
+  const [target, setTarget] = useState(ALL)
 
   const categories = useMemo(
     () => [...new Set(addons.map(a => a.category))].sort(),
@@ -22,8 +23,19 @@ export default function AddonsView({ onClose }) {
 
   const filtered = useMemo(() => addons.filter(a =>
     (category === ALL || a.category === category) &&
-    (status === ALL || a.status === status)
-  ), [addons, category, status])
+    (status === ALL || a.status === status) &&
+    (target === ALL || a.target === target)
+  ), [addons, category, status, target])
+
+  const pollMs = useMemo(() => (
+    addons.some(a => ['queued', 'installing', 'removing', 'install_failed'].includes(a.status))
+      ? 2500 : 15000
+  ), [addons])
+
+  useEffect(() => {
+    const id = setInterval(refresh, pollMs)
+    return () => clearInterval(id)
+  }, [pollMs, refresh])
 
   return (
     <div className={styles.overlay} onClick={e => e.target === e.currentTarget && onClose?.()}>
@@ -41,6 +53,11 @@ export default function AddonsView({ onClose }) {
               {['available', 'installed', 'installing', 'install_failed'].map(s => (
                 <option key={s} value={s}>{statusMeta(s).label}</option>
               ))}
+            </select>
+            <select className={styles.select} value={target} onChange={e => setTarget(e.target.value)}>
+              <option value={ALL}>All targets</option>
+              <option value="os">OS</option>
+              <option value="cluster">Cluster</option>
             </select>
           </div>
           <button className={styles.closeBtn} onClick={onClose} aria-label="Close addons">✕</button>

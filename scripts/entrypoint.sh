@@ -138,6 +138,7 @@ cat >> /root/.bashrc << 'BASHRC'
 # KubeKosh aliases
 export KUBECONFIG=/root/.kube/config
 export PATH=/data/addons/bin:$PATH
+shopt -s checkhash
 alias k='kubectl'
 alias kgp='kubectl get pods'
 alias kga='kubectl get pods --all-namespaces'

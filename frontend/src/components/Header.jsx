@@ -12,7 +12,7 @@ function ReloadModal({ state, data, error, onClose, onReload }) {
               <span className={styles.reloadSpinner} />
             </div>
             <div className={styles.reloadModalTitle}>Reloading Cache…</div>
-            <div className={styles.reloadModalSub}>Fetching latest scenarios and bundles from disk.</div>
+            <div className={styles.reloadModalSub}>Fetching latest scenarios, bundles, and addons from disk.</div>
           </>
         )}
 
@@ -30,6 +30,11 @@ function ReloadModal({ state, data, error, onClose, onReload }) {
               <div className={styles.reloadStat}>
                 <span className={styles.reloadStatNum}>{data?.bundles_count ?? '—'}</span>
                 <span className={styles.reloadStatLabel}>Bundles</span>
+              </div>
+              <div className={styles.reloadStatDivider} />
+              <div className={styles.reloadStat}>
+                <span className={styles.reloadStatNum}>{data?.addons_count ?? '—'}</span>
+                <span className={styles.reloadStatLabel}>Addons</span>
               </div>
             </div>
             <div className={styles.reloadModalActions}>

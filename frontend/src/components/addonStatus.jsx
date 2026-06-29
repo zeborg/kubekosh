@@ -3,6 +3,7 @@
 
 export const STATUS_META = {
   available:      { label: 'Available',  tone: 'Grey'  },
+  queued:         { label: 'Queued',     tone: 'Amber', busy: true },
   installing:     { label: 'Installing', tone: 'Amber', busy: true },
   installed:      { label: 'Installed',  tone: 'Green' },
   removing:       { label: 'Removing',   tone: 'Amber', busy: true },

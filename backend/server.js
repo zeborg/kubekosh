@@ -10,6 +10,16 @@ const { readState, writeState, reconcileInterrupted } = require('./lib/addon-sta
 const { createJobEngine } = require('./lib/addon-jobs');
 const { createAddonsRouter } = require('./routes/addons');
 
+// Safety net: a single stray async error (e.g. a background addon job or health
+// probe) must not silently kill the API and put the container in a restart loop.
+// Log it loudly and keep serving — orchestrators read these lines.
+process.on('unhandledRejection', (reason) => {
+  console.error('UNHANDLED REJECTION (kept alive):', reason && reason.stack || reason);
+});
+process.on('uncaughtException', (err) => {
+  console.error('UNCAUGHT EXCEPTION (kept alive):', err && err.stack || err);
+});
+
 const app = express();
 const PORT = 4000;
 
