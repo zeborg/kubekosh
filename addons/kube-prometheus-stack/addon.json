@@ -1,0 +1,48 @@
+{
+  "id": "kube-prometheus-stack",
+  "name": "Kube Prometheus Stack",
+  "description": "End-to-end cluster monitoring — Prometheus, Grafana, Alertmanager, node-exporter, kube-state-metrics, and the Prometheus Operator. Installed via Helm into the monitoring namespace.",
+  "category": "Observability",
+  "icon": "📊",
+  "logo": "https://raw.githubusercontent.com/cncf/artwork/master/projects/prometheus/icon/color/prometheus-icon-color.svg",
+  "target": "cluster",
+  "version": "87.3.0",
+  "docs_url": "https://github.com/prometheus-community/helm-charts/tree/main/charts/kube-prometheus-stack",
+  "est_seconds": 420,
+  "arch_support": ["amd64", "arm64"],
+  "tags": ["observability", "monitoring", "prometheus", "grafana", "helm"],
+  "dependencies": ["helm"],
+  "setup_commands": [
+    {
+      "command": "helm repo add prometheus-community https://prometheus-community.github.io/helm-charts --force-update && helm repo update prometheus-community",
+      "label": "Adding Prometheus Community Helm repo"
+    },
+    {
+      "command": "helm upgrade --install kube-prometheus-stack prometheus-community/kube-prometheus-stack --version ${VERSION} --namespace monitoring --create-namespace --set prometheus-node-exporter.hostRootFsMount.mountPropagation=None --set 'grafana.grafana\\.ini.server.root_url=http://localhost:7554/grafana' --set 'grafana.grafana\\.ini.server.serve_from_sub_path=true' --wait --timeout 8m",
+      "label": "Installing kube-prometheus-stack"
+    },
+    {
+      "command": "[ -f /var/run/grafana-pf.pid ] && kill $(cat /var/run/grafana-pf.pid) 2>/dev/null; sleep 1; nohup kubectl -n monitoring port-forward --address 0.0.0.0 svc/kube-prometheus-stack-grafana 3000:80 >/var/log/grafana-portforward.log 2>&1 & echo $! >/var/run/grafana-pf.pid; sleep 2; echo 'Grafana port-forward ready on :3000'",
+      "label": "Starting Grafana port-forward"
+    }
+  ],
+  "teardown_commands": [
+    {
+      "command": "[ -f /var/run/grafana-pf.pid ] && kill $(cat /var/run/grafana-pf.pid) 2>/dev/null; rm -f /var/run/grafana-pf.pid; true",
+      "label": "Stopping Grafana port-forward"
+    },
+    {
+      "command": "helm uninstall kube-prometheus-stack -n monitoring 2>/dev/null || true",
+      "label": "Uninstalling kube-prometheus-stack"
+    },
+    {
+      "command": "kubectl delete namespace monitoring --ignore-not-found",
+      "label": "Removing namespace"
+    },
+    {
+      "command": "kubectl get crd -o name | grep monitoring.coreos.com | xargs -r kubectl delete --ignore-not-found",
+      "label": "Removing Prometheus Operator CRDs"
+    }
+  ],
+  "health_command": "helm status kube-prometheus-stack -n monitoring"
+}

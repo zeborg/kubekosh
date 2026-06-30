@@ -14,6 +14,7 @@ RUN apt-get update && apt-get install -y \
     iproute2 iptables iputils-ping \
     procps htop \
     mount kmod \
+    tar unzip \
     python3 python3-yaml make g++ \
     && rm -rf /var/lib/apt/lists/*
 
@@ -56,6 +57,7 @@ RUN cd frontend && VITE_APP_VERSION=${VITE_APP_VERSION} npm run build
 # Copy everything else
 COPY backend/  ./backend/
 COPY scenarios/ ./scenarios/
+COPY addons/ ./addons/
 COPY scripts/entrypoint.sh /entrypoint.sh
 COPY scripts/nginx.conf /etc/nginx/nginx.conf
 

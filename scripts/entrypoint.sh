@@ -129,10 +129,16 @@ done
 # ── 4. Shell environment ─────────────────────────────────────────────────────
 LOG "Configuring shell environment..."
 
+# Persistent install target for OS-level addons (on the /data mount so it
+# survives container restarts); put it on PATH for the interactive terminal.
+mkdir -p /data/addons/bin
+
 cat >> /root/.bashrc << 'BASHRC'
 
 # KubeKosh aliases
 export KUBECONFIG=/root/.kube/config
+export PATH=/data/addons/bin:$PATH
+shopt -s checkhash
 alias k='kubectl'
 alias kgp='kubectl get pods'
 alias kga='kubectl get pods --all-namespaces'

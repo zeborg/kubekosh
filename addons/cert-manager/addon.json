@@ -1,0 +1,32 @@
+{
+  "id": "cert-manager",
+  "name": "cert-manager",
+  "description": "Automates issuance and renewal of TLS certificates in Kubernetes from sources like Let's Encrypt, HashiCorp Vault, and self-signed CAs.",
+  "category": "Security & Policy",
+  "icon": "🔐",
+  "logo": "https://raw.githubusercontent.com/cncf/artwork/master/projects/cert-manager/icon/color/cert-manager-icon-color.svg",
+  "target": "cluster",
+  "version": "1.17.2",
+  "docs_url": "https://cert-manager.io/docs/",
+  "est_seconds": 240,
+  "arch_support": ["amd64", "arm64"],
+  "tags": ["tls", "certificates", "security", "acme"],
+  "dependencies": [],
+  "setup_commands": [
+    {
+      "command": "kubectl apply --server-side --force-conflicts -f https://github.com/cert-manager/cert-manager/releases/download/v${VERSION}/cert-manager.yaml",
+      "label": "Applying cert-manager manifests"
+    },
+    {
+      "command": "set -e; for d in cert-manager cert-manager-cainjector cert-manager-webhook; do kubectl -n cert-manager rollout status deploy/$d --timeout=300s; done",
+      "label": "Waiting for cert-manager to become ready"
+    }
+  ],
+  "teardown_commands": [
+    {
+      "command": "kubectl delete --ignore-not-found -f https://github.com/cert-manager/cert-manager/releases/download/v${VERSION}/cert-manager.yaml",
+      "label": "Removing cert-manager"
+    }
+  ],
+  "health_command": "kubectl -n cert-manager rollout status deploy/cert-manager-webhook --timeout=20s"
+}

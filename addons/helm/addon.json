@@ -1,0 +1,32 @@
+{
+  "id": "helm",
+  "name": "Helm",
+  "description": "The package manager for Kubernetes — install, upgrade, and manage applications packaged as charts.",
+  "category": "Package Management",
+  "icon": "⎈",
+  "logo": "https://raw.githubusercontent.com/cncf/artwork/master/projects/helm/icon/color/helm-icon-color.svg",
+  "target": "os",
+  "version": "3.21.2",
+  "docs_url": "https://helm.sh/docs/",
+  "est_seconds": 30,
+  "arch_support": ["amd64", "arm64"],
+  "tags": ["charts", "packaging", "cli"],
+  "dependencies": [],
+  "setup_commands": [
+    {
+      "command": "curl -fsSL -o /tmp/helm-${VERSION}.tar.gz https://get.helm.sh/helm-v${VERSION}-linux-${ARCH}.tar.gz",
+      "label": "Downloading Helm"
+    },
+    {
+      "command": "tar -xzf /tmp/helm-${VERSION}.tar.gz -C /tmp && install -m 0755 /tmp/linux-${ARCH}/helm ${ADDON_BIN}/helm && rm -rf /tmp/helm-${VERSION}.tar.gz /tmp/linux-${ARCH}",
+      "label": "Installing helm binary"
+    }
+  ],
+  "teardown_commands": [
+    {
+      "command": "rm -f ${ADDON_BIN}/helm",
+      "label": "Removing helm binary"
+    }
+  ],
+  "health_command": "helm version --short"
+}

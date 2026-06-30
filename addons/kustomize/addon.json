@@ -1,0 +1,32 @@
+{
+  "id": "kustomize",
+  "name": "Kustomize",
+  "description": "Template-free customization of Kubernetes YAML — manage overlays, patches, and environments without forking manifests.",
+  "category": "Package Management",
+  "icon": "🧱",
+  "logo": "https://kustomize.io/favicons/favicon-32x32.png",
+  "target": "os",
+  "version": "5.8.1",
+  "docs_url": "https://kustomize.io/",
+  "est_seconds": 30,
+  "arch_support": ["amd64", "arm64"],
+  "tags": ["yaml", "overlays", "cli"],
+  "dependencies": [],
+  "setup_commands": [
+    {
+      "command": "curl -fsSL -o /tmp/kustomize-${VERSION}.tar.gz https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2Fv${VERSION}/kustomize_v${VERSION}_linux_${ARCH}.tar.gz",
+      "label": "Downloading Kustomize"
+    },
+    {
+      "command": "tar -xzf /tmp/kustomize-${VERSION}.tar.gz -C /tmp && install -m 0755 /tmp/kustomize ${ADDON_BIN}/kustomize && rm -f /tmp/kustomize-${VERSION}.tar.gz /tmp/kustomize",
+      "label": "Installing kustomize binary"
+    }
+  ],
+  "teardown_commands": [
+    {
+      "command": "rm -f ${ADDON_BIN}/kustomize",
+      "label": "Removing kustomize binary"
+    }
+  ],
+  "health_command": "kustomize version"
+}

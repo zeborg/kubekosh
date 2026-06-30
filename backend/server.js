@@ -5,16 +5,51 @@ const { exec } = require('child_process');
 const { promisify } = require('util');
 const execAsync = promisify(exec);
 const Database = require('better-sqlite3');
+const { loadAddonManifests, validateGraph } = require('./lib/addons');
+const { readState, writeState, reconcileInterrupted } = require('./lib/addon-state');
+const { createJobEngine } = require('./lib/addon-jobs');
+const { createAddonsRouter } = require('./routes/addons');
+
+// Safety net: a single stray async error (e.g. a background addon job or health
+// probe) must not silently kill the API and put the container in a restart loop.
+// Log it loudly and keep serving — orchestrators read these lines.
+process.on('unhandledRejection', (reason) => {
+  console.error('UNHANDLED REJECTION (kept alive):', reason && reason.stack || reason);
+});
+process.on('uncaughtException', (err) => {
+  console.error('UNCAUGHT EXCEPTION (kept alive):', err && err.stack || err);
+});
 
 const app = express();
 const PORT = 4000;
 
 app.use(express.json());
+app.use((req, res, next) => {
+  if (req.path.startsWith('/api/')) {
+    const originalJson = res.json;
+    res.json = function(data) {
+      if (!res.get('Content-Type')) {
+        res.set('Content-Type', 'application/json');
+      }
+      return originalJson.call(this, data);
+    };
+  }
+  next();
+});
 app.use(express.static(path.join(__dirname, '../frontend/dist')));
 
 const SCENARIOS_DIR = path.join(__dirname, '../scenarios/data');
 const BUNDLES_DIR   = path.join(__dirname, '../scenarios/bundles');
 const DB_FILE = process.env.PROGRESS_DB || '/data/progress.db';
+
+// ── Addons system paths (env-overridable for testability) ─────────────────────
+// ADDONS_DIR        — addon manifests (addons/<id>/addon.json), shipped in-repo
+// ADDONS_STATE_FILE — runtime install state, persisted on the /data mount
+// ADDONS_BIN_DIR    — install target for target:"os" binaries; on /data so it
+//                     survives container restarts and is added to the shell PATH
+const ADDONS_DIR        = process.env.ADDONS_DIR        || path.join(__dirname, '../addons');
+const ADDONS_STATE_FILE = process.env.ADDONS_STATE_FILE || '/data/addons-state.json';
+const ADDONS_BIN_DIR    = process.env.ADDONS_BIN_DIR    || '/data/addons/bin';
 
 // ── SQLite progress store ─────────────────────────────────────────────────────
 
@@ -153,12 +188,19 @@ function loadJsonDir(dir) {
 
 let scenariosCache = [];
 let bundlesCache = [];
+let addonsCache = [];
 
 function reloadCache() {
   try {
     scenariosCache = loadJsonDir(SCENARIOS_DIR);
     bundlesCache = loadJsonDir(BUNDLES_DIR);
-    console.log(`Loaded ${scenariosCache.length} scenarios and ${bundlesCache.length} bundles into cache.`);
+
+    const { addons, errors } = loadAddonManifests(ADDONS_DIR);
+    addonsCache = addons;
+    errors.forEach(e => console.warn(`Addon manifest issue: ${e}`));
+    validateGraph(addonsCache).forEach(e => console.warn(`Addon dependency issue: ${e}`));
+
+    console.log(`Loaded ${scenariosCache.length} scenarios, ${bundlesCache.length} bundles, and ${addonsCache.length} addons into cache.`);
   } catch (e) {
     console.error('Failed to reload cache:', e.message);
   }
@@ -167,12 +209,28 @@ function reloadCache() {
 // Initial cache populate
 reloadCache();
 
+// Addons: repair any jobs left mid-flight by a previous container run
+try {
+  const state = readState(ADDONS_STATE_FILE);
+  const reconciled = reconcileInterrupted(state);
+  if (JSON.stringify(reconciled) !== JSON.stringify(state)) {
+    writeState(ADDONS_STATE_FILE, reconciled);
+    console.log('Reconciled interrupted addon jobs from a previous run.');
+  }
+} catch (e) {
+  console.error('Addon state reconciliation failed:', e.message);
+}
+
 function loadScenarios() {
   return scenariosCache;
 }
 
 function loadBundles() {
   return bundlesCache;
+}
+
+function loadAddons() {
+  return addonsCache;
 }
 
 async function runCommand(cmd, timeoutMs = 15000) {
@@ -761,14 +819,27 @@ app.post('/api/cache/reload', (req, res) => {
     ok: true,
     message: 'Cache reloaded successfully',
     scenarios_count: loadScenarios().length,
-    bundles_count: loadBundles().length
+    bundles_count: loadBundles().length,
+    addons_count: loadAddons().length
   });
 });
+
+// Addons API — async install/remove engine + SSE streaming
+const addonEngine = createJobEngine({
+  loadAddons,
+  stateFile: ADDONS_STATE_FILE,
+  binDir: ADDONS_BIN_DIR
+});
+app.use('/api/addons', createAddonsRouter({ loadAddons, stateFile: ADDONS_STATE_FILE, engine: addonEngine }));
+
+// Best-effort: re-install addons whose health check fails after a restart
+// (e.g. OS binaries lost on an ephemeral filesystem). Non-blocking.
+addonEngine.healthReconcile().catch(e => console.error('addon health reconcile failed:', e.message));
 
 // GET /api/health
 app.get('/api/health', async (req, res) => {
   const kube = await runCommand('kubectl cluster-info --request-timeout=3s 2>&1 | head -1');
-  res.json({ api: 'ok', cluster: kube.success ? 'ready' : 'not_ready', cluster_info: kube.output });
+  res.type('application/json').json({ api: 'ok', cluster: kube.success ? 'ready' : 'not_ready', cluster_info: kube.output });
 });
 
 // Fallback to frontend SPA

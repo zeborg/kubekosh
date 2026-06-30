@@ -1,0 +1,44 @@
+{
+  "id": "istio",
+  "name": "Istio",
+  "description": "Service mesh for traffic management, security, and observability. Installs the base CRDs and the istiod control plane via Helm.",
+  "category": "Service Mesh",
+  "icon": "⛵",
+  "logo": "https://raw.githubusercontent.com/cncf/artwork/master/projects/istio/icon/color/istio-icon-color.svg",
+  "target": "cluster",
+  "version": "1.30.2",
+  "docs_url": "https://istio.io/latest/docs/",
+  "est_seconds": 300,
+  "arch_support": ["amd64", "arm64"],
+  "tags": ["service-mesh", "networking", "security", "helm"],
+  "dependencies": ["helm"],
+  "setup_commands": [
+    {
+      "command": "helm repo add istio https://istio-release.storage.googleapis.com/charts --force-update && helm repo update istio",
+      "label": "Adding Istio Helm repo"
+    },
+    {
+      "command": "helm upgrade --install istio-base istio/base --version ${VERSION} --namespace istio-system --create-namespace --wait --timeout 5m",
+      "label": "Installing Istio base (CRDs)"
+    },
+    {
+      "command": "helm upgrade --install istiod istio/istiod --version ${VERSION} --namespace istio-system --wait --timeout 5m",
+      "label": "Installing istiod control plane"
+    }
+  ],
+  "teardown_commands": [
+    {
+      "command": "helm uninstall istiod -n istio-system 2>/dev/null || true",
+      "label": "Uninstalling istiod"
+    },
+    {
+      "command": "helm uninstall istio-base -n istio-system 2>/dev/null || true",
+      "label": "Uninstalling Istio base"
+    },
+    {
+      "command": "kubectl delete namespace istio-system --ignore-not-found",
+      "label": "Removing namespace"
+    }
+  ],
+  "health_command": "helm status istiod -n istio-system"
+}

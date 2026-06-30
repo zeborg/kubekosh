@@ -1,0 +1,63 @@
+{
+    "id": "thanos",
+    "name": "Thanos",
+    "description": "Global, highly-available query layer over the kube-prometheus-stack Prometheus. Enables the Thanos sidecar on Prometheus and deploys Thanos Query, registered as a Grafana datasource. (Re-install if kube-prometheus-stack is later upgraded, which resets the sidecar.)",
+    "category": "Observability",
+    "icon": "🔭",
+    "logo": "https://raw.githubusercontent.com/cncf/artwork/master/projects/thanos/icon/color/thanos-icon-color.svg",
+    "target": "cluster",
+    "version": "0.41.0",
+    "docs_url": "https://thanos.io/tip/thanos/getting-started.md/",
+    "est_seconds": 240,
+    "arch_support": [
+        "amd64",
+        "arm64"
+    ],
+    "tags": [
+        "metrics",
+        "observability",
+        "prometheus",
+        "ha"
+    ],
+    "dependencies": [
+        "helm",
+        "kube-prometheus-stack"
+    ],
+    "setup_commands": [
+        {
+            "command": "kubectl -n monitoring patch prometheus kube-prometheus-stack-prometheus --type merge -p '{\"spec\":{\"thanos\":{\"image\":\"quay.io/thanos/thanos:v${VERSION}\"}}}' && kubectl -n monitoring rollout status statefulset/prometheus-kube-prometheus-stack-prometheus --timeout=300s",
+            "label": "Enabling Thanos sidecar on Prometheus"
+        },
+        {
+            "command": "kubectl apply -f - <<'EOF'\napiVersion: v1\nkind: Namespace\nmetadata:\n  name: thanos\n---\napiVersion: v1\nkind: Service\nmetadata:\n  name: thanos-sidecar-grpc\n  namespace: monitoring\nspec:\n  clusterIP: None\n  publishNotReadyAddresses: true\n  selector:\n    app.kubernetes.io/name: prometheus\n    operator.prometheus.io/name: kube-prometheus-stack-prometheus\n  ports:\n    - name: grpc\n      port: 10901\n      targetPort: 10901\n---\napiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: thanos-query\n  namespace: thanos\n  labels:\n    app: thanos-query\nspec:\n  replicas: 1\n  selector:\n    matchLabels:\n      app: thanos-query\n  template:\n    metadata:\n      labels:\n        app: thanos-query\n    spec:\n      containers:\n        - name: thanos-query\n          image: quay.io/thanos/thanos:v${VERSION}\n          args:\n            - query\n            - --http-address=0.0.0.0:9090\n            - --grpc-address=0.0.0.0:10901\n            - --query.replica-label=prometheus_replica\n            - --endpoint=dnssrv+_grpc._tcp.thanos-sidecar-grpc.monitoring.svc.cluster.local\n          ports:\n            - name: http\n              containerPort: 9090\n            - name: grpc\n              containerPort: 10901\n          readinessProbe:\n            httpGet:\n              path: /-/ready\n              port: 9090\n            initialDelaySeconds: 10\n---\napiVersion: v1\nkind: Service\nmetadata:\n  name: thanos-query\n  namespace: thanos\nspec:\n  selector:\n    app: thanos-query\n  ports:\n    - name: http\n      port: 9090\n      targetPort: 9090\nEOF",
+            "label": "Deploying Thanos Query"
+        },
+        {
+            "command": "kubectl -n thanos rollout status deploy/thanos-query --timeout=180s",
+            "label": "Waiting for Thanos Query to become ready"
+        },
+        {
+            "command": "kubectl apply -f - <<'EOF'\napiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: thanos-grafana-datasource\n  namespace: monitoring\n  labels:\n    grafana_datasource: \"1\"\ndata:\n  thanos-datasource.yaml: |\n    apiVersion: 1\n    datasources:\n    - name: Thanos\n      type: prometheus\n      access: proxy\n      url: http://thanos-query.thanos.svc.cluster.local:9090\n      isDefault: false\nEOF",
+            "label": "Registering Thanos datasource in Grafana"
+        }
+    ],
+    "teardown_commands": [
+        {
+            "command": "kubectl delete configmap thanos-grafana-datasource -n monitoring --ignore-not-found",
+            "label": "Removing Grafana datasource"
+        },
+        {
+            "command": "kubectl delete namespace thanos --ignore-not-found",
+            "label": "Removing Thanos Query"
+        },
+        {
+            "command": "kubectl delete service thanos-sidecar-grpc -n monitoring --ignore-not-found",
+            "label": "Removing sidecar discovery service"
+        },
+        {
+            "command": "kubectl -n monitoring patch prometheus kube-prometheus-stack-prometheus --type merge -p '{\"spec\":{\"thanos\":null}}' 2>/dev/null || true",
+            "label": "Disabling Thanos sidecar"
+        }
+    ],
+    "health_command": "kubectl -n thanos rollout status deploy/thanos-query --timeout=20s"
+}
