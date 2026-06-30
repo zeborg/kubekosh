@@ -49,6 +49,26 @@ docker run -itd --name kubekosh --privileged -p 7554:80 \
 
 Progress is stored in SQLite at `/data/progress.db` inside the container. Mount a local directory to `/data` to keep progress across container restarts.
 
+### Run Using Docker Compose
+
+```bash
+# Clone repo
+git clone https://github.com/zeborg/kubekosh
+cd kubekosh
+
+# Start KubeKosh
+docker compose up -d
+
+# Check logs
+docker compose logs -f
+
+# Stop and remove containers
+docker compose down
+
+# Delete everything including data
+docker compose down -v
+```
+
 ### Build From Source
 
 ```bash
