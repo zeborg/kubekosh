@@ -1,0 +1,44 @@
+{
+  "id": "opencost",
+  "name": "OpenCost",
+  "description": "Real-time cost monitoring for Kubernetes workloads — measures and allocates spend by namespace, deployment, label, and more. Installed via Helm (chart 2.5.25) and wired to the kube-prometheus-stack Prometheus.",
+  "category": "Observability",
+  "icon": "💰",
+  "logo": "https://github.com/opencost.png",
+  "target": "cluster",
+  "version": "1.120.3",
+  "docs_url": "https://www.opencost.io/docs/",
+  "est_seconds": 240,
+  "arch_support": ["amd64", "arm64"],
+  "tags": ["cost", "finops", "observability", "helm"],
+  "dependencies": ["helm", "kube-prometheus-stack"],
+  "setup_commands": [
+    {
+      "command": "helm repo add opencost https://opencost.github.io/opencost-helm-chart --force-update && helm repo update opencost",
+      "label": "Adding OpenCost Helm repo"
+    },
+    {
+      "command": "helm upgrade --install opencost opencost/opencost --version 2.5.25 --namespace opencost --create-namespace --set opencost.prometheus.internal.enabled=true --set opencost.prometheus.internal.serviceName=kube-prometheus-stack-prometheus --set opencost.prometheus.internal.namespaceName=monitoring --set opencost.prometheus.internal.port=9090 --wait --timeout 5m",
+      "label": "Installing OpenCost"
+    },
+    {
+      "command": "[ -f /var/run/opencost-pf.pid ] && kill $(cat /var/run/opencost-pf.pid) 2>/dev/null; sleep 1; nohup kubectl -n opencost port-forward --address 0.0.0.0 svc/opencost 9090:9090 9003:9003 >/var/log/opencost-portforward.log 2>&1 & echo $! >/var/run/opencost-pf.pid; sleep 2; echo 'OpenCost port-forward ready (UI :9090, API :9003)'",
+      "label": "Starting OpenCost port-forward"
+    }
+  ],
+  "teardown_commands": [
+    {
+      "command": "[ -f /var/run/opencost-pf.pid ] && kill $(cat /var/run/opencost-pf.pid) 2>/dev/null; rm -f /var/run/opencost-pf.pid; true",
+      "label": "Stopping OpenCost port-forward"
+    },
+    {
+      "command": "helm uninstall opencost -n opencost 2>/dev/null || true",
+      "label": "Uninstalling OpenCost"
+    },
+    {
+      "command": "kubectl delete namespace opencost --ignore-not-found",
+      "label": "Removing namespace"
+    }
+  ],
+  "health_command": "helm status opencost -n opencost"
+}

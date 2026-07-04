@@ -1,0 +1,32 @@
+{
+  "id": "kyverno",
+  "name": "Kyverno",
+  "description": "Kubernetes-native policy engine — validate, mutate, and generate resources with policies written as Kubernetes resources, no new language to learn.",
+  "category": "Security & Policy",
+  "icon": "🛡️",
+  "logo": "https://raw.githubusercontent.com/cncf/artwork/master/projects/kyverno/icon/color/kyverno-icon-color.svg",
+  "target": "cluster",
+  "version": "1.18.1",
+  "docs_url": "https://kyverno.io/docs/",
+  "est_seconds": 300,
+  "arch_support": ["amd64", "arm64"],
+  "tags": ["policy", "security", "admission", "governance"],
+  "dependencies": [],
+  "setup_commands": [
+    {
+      "command": "kubectl apply --server-side --force-conflicts -f https://github.com/kyverno/kyverno/releases/download/v${VERSION}/install.yaml",
+      "label": "Applying Kyverno manifests"
+    },
+    {
+      "command": "set -e; for d in admission background cleanup reports; do kubectl -n kyverno rollout status deploy/kyverno-$d-controller --timeout=600s; done",
+      "label": "Waiting for Kyverno to become ready"
+    }
+  ],
+  "teardown_commands": [
+    {
+      "command": "kubectl delete --ignore-not-found -f https://github.com/kyverno/kyverno/releases/download/v${VERSION}/install.yaml",
+      "label": "Removing Kyverno"
+    }
+  ],
+  "health_command": "kubectl -n kyverno rollout status deploy/kyverno-admission-controller --timeout=20s"
+}

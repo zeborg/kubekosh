@@ -1,0 +1,36 @@
+{
+  "id": "haproxy-ingress",
+  "name": "HAProxy Ingress",
+  "description": "High-performance ingress controller backed by HAProxy. Installed via Helm (chart 1.52.0) into the haproxy-controller namespace.",
+  "category": "Networking",
+  "icon": "🔀",
+  "logo": "https://github.com/haproxytech.png",
+  "target": "cluster",
+  "version": "3.2.9",
+  "docs_url": "https://www.haproxy.com/documentation/kubernetes-ingress/",
+  "est_seconds": 240,
+  "arch_support": ["amd64", "arm64"],
+  "tags": ["networking", "ingress", "loadbalancer", "helm"],
+  "dependencies": ["helm"],
+  "setup_commands": [
+    {
+      "command": "helm repo add haproxytech https://haproxytech.github.io/helm-charts --force-update && helm repo update haproxytech",
+      "label": "Adding HAProxy Helm repo"
+    },
+    {
+      "command": "helm upgrade --install haproxy-ingress haproxytech/kubernetes-ingress --version 1.52.0 --namespace haproxy-controller --create-namespace --wait --timeout 5m",
+      "label": "Installing HAProxy Ingress"
+    }
+  ],
+  "teardown_commands": [
+    {
+      "command": "helm uninstall haproxy-ingress --namespace haproxy-controller 2>/dev/null || true",
+      "label": "Uninstalling HAProxy Ingress"
+    },
+    {
+      "command": "kubectl delete namespace haproxy-controller --ignore-not-found",
+      "label": "Removing namespace"
+    }
+  ],
+  "health_command": "helm status haproxy-ingress -n haproxy-controller"
+}

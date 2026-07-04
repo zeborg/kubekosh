@@ -1,0 +1,28 @@
+{
+  "id": "gateway-api",
+  "name": "Gateway API",
+  "description": "The next-generation Kubernetes ingress and traffic-routing API — installs the standard-channel CRDs (Gateway, GatewayClass, HTTPRoute, …).",
+  "category": "Networking",
+  "icon": "🚪",
+  "logo": "https://gateway-api.sigs.k8s.io/images/logo/logo.svg",
+  "target": "cluster",
+  "version": "1.2.1",
+  "docs_url": "https://gateway-api.sigs.k8s.io/",
+  "est_seconds": 60,
+  "arch_support": ["amd64", "arm64"],
+  "tags": ["networking", "ingress", "crd", "routing"],
+  "dependencies": [],
+  "setup_commands": [
+    {
+      "command": "kubectl apply --server-side --force-conflicts -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v${VERSION}/standard-install.yaml",
+      "label": "Applying Gateway API CRDs"
+    }
+  ],
+  "teardown_commands": [
+    {
+      "command": "kubectl delete --ignore-not-found -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v${VERSION}/standard-install.yaml",
+      "label": "Removing Gateway API CRDs"
+    }
+  ],
+  "health_command": "kubectl get crd gateways.gateway.networking.k8s.io"
+}

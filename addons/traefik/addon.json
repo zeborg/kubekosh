@@ -1,0 +1,36 @@
+{
+  "id": "traefik",
+  "name": "Traefik",
+  "description": "Cloud-native ingress controller and reverse proxy with automatic service discovery, middlewares, and a built-in dashboard. Installed via Helm into the traefik namespace; the dashboard is served under the base path /traefik and reachable at http://<host>:7554/traefik via the KubeKosh proxy.",
+  "category": "Networking",
+  "icon": "🚦",
+  "logo": "https://upload.wikimedia.org/wikipedia/commons/1/1b/Traefik.logo.png",
+  "target": "cluster",
+  "version": "3.7.5",
+  "docs_url": "https://doc.traefik.io/traefik/",
+  "est_seconds": 180,
+  "arch_support": ["amd64", "arm64"],
+  "tags": ["networking", "ingress", "reverse-proxy", "helm"],
+  "dependencies": ["helm"],
+  "setup_commands": [
+    {
+      "command": "helm repo add traefik https://traefik.github.io/charts --force-update && helm repo update traefik",
+      "label": "Adding Traefik Helm repo"
+    },
+    {
+      "command": "helm upgrade --install traefik traefik/traefik --version 41.0.0 --namespace traefik --create-namespace --wait --timeout 5m -f - <<'EOF'\nimage:\n  tag: \"v${VERSION}\"\nservice:\n  spec:\n    type: ClusterIP\napi:\n  dashboard: true\n  basePath: /traefik\ningressRoute:\n  dashboard:\n    enabled: true\n    matchRule: PathPrefix(`/traefik`)\n    entryPoints:\n      - web\nEOF",
+      "label": "Installing Traefik"
+    }
+  ],
+  "teardown_commands": [
+    {
+      "command": "helm uninstall traefik -n traefik 2>/dev/null || true",
+      "label": "Uninstalling Traefik"
+    },
+    {
+      "command": "kubectl delete namespace traefik --ignore-not-found",
+      "label": "Removing namespace"
+    }
+  ],
+  "health_command": "helm status traefik -n traefik"
+}
