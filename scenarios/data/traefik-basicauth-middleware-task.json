@@ -1,0 +1,55 @@
+{
+  "id": "traefik-basicauth-middleware-task",
+  "title": "Protect a Route with BasicAuth Middleware",
+  "category": "Traefik",
+  "difficulty": "Medium",
+  "type": "task",
+  "weight": 5,
+  "description": "## Protect a Route with BasicAuth Middleware\n\nTraefik's `BasicAuth` middleware protects routes with HTTP Basic Authentication. Credentials are stored as htpasswd-formatted strings in a Kubernetes Secret, which the middleware references.\n\n**Your task:**\n\nIn the `traefik-lab` namespace:\n1. Create a Secret named `basic-auth-secret` with a key `users` containing the htpasswd entry: `admin:$apr1$xyz$abc123` (use this literal string — no real hashing needed for this exercise).\n2. Create a `Middleware` named `basic-auth` that uses `BasicAuth` and references the secret `basic-auth-secret`.\n\n```bash\n# Verify:\nkubectl get middleware basic-auth -n traefik-lab -o jsonpath='{.spec.basicAuth.secret}'\n```",
+  "hints": [
+    {
+      "title": "Secret and Middleware YAML",
+      "body": "The BasicAuth middleware's spec.basicAuth.secret field must match the name of a Secret in the same namespace. The Secret must have a 'users' key with htpasswd-formatted content.",
+      "command": "kubectl create secret generic basic-auth-secret --from-literal=users='admin:$apr1$xyz$abc123' -n traefik-lab"
+    },
+    {
+      "title": "Creating the Middleware",
+      "body": "After creating the Secret, apply the Middleware referencing it.",
+      "command": "kubectl apply -f - <<EOF\napiVersion: traefik.io/v1alpha1\nkind: Middleware\nmetadata:\n  name: basic-auth\n  namespace: traefik-lab\nspec:\n  basicAuth:\n    secret: basic-auth-secret\nEOF"
+    }
+  ],
+  "setup_commands": [
+    { "command": "kubectl create namespace traefik-lab 2>/dev/null || true" },
+    { "command": "kubectl delete middleware basic-auth -n traefik-lab --ignore-not-found" },
+    { "command": "kubectl delete secret basic-auth-secret -n traefik-lab --ignore-not-found" }
+  ],
+  "teardown_commands": [
+    { "command": "kubectl delete middleware basic-auth -n traefik-lab --ignore-not-found" },
+    { "command": "kubectl delete secret basic-auth-secret -n traefik-lab --ignore-not-found" },
+    { "command": "kubectl delete namespace traefik-lab --ignore-not-found" }
+  ],
+  "default_namespace": "traefik-lab",
+  "validation": {
+    "description": "Check that the BasicAuth middleware and its backing secret exist",
+    "commands": [
+      {
+        "description": "Secret basic-auth-secret exists",
+        "command": "kubectl get secret basic-auth-secret -n traefik-lab -o jsonpath='{.metadata.name}'",
+        "expected_output": "basic-auth-secret",
+        "match": "exact"
+      },
+      {
+        "description": "Middleware basic-auth exists",
+        "command": "kubectl get middleware basic-auth -n traefik-lab -o jsonpath='{.metadata.name}'",
+        "expected_output": "basic-auth",
+        "match": "exact"
+      },
+      {
+        "description": "BasicAuth secret reference is basic-auth-secret",
+        "command": "kubectl get middleware basic-auth -n traefik-lab -o jsonpath='{.spec.basicAuth.secret}'",
+        "expected_output": "basic-auth-secret",
+        "match": "exact"
+      }
+    ]
+  }
+}

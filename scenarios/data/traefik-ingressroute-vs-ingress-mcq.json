@@ -1,0 +1,27 @@
+{
+  "id": "traefik-ingressroute-vs-ingress-mcq",
+  "title": "IngressRoute vs Kubernetes Ingress",
+  "category": "Traefik",
+  "difficulty": "Easy",
+  "type": "mcq",
+  "weight": 3,
+  "description": "## IngressRoute vs Kubernetes Ingress\n\nTraefik supports both the standard Kubernetes `Ingress` resource and its own custom `IngressRoute` CRD.\n\nWhich statement correctly identifies an advantage of `IngressRoute` over a standard `Ingress`?",
+  "options": [
+    { "id": "a", "text": "IngressRoute is easier to configure because it uses YAML annotations instead of a spec block" },
+    { "id": "b", "text": "IngressRoute supports native middleware composition, TCP/UDP routing, and priority-based rule ordering — features not expressible in standard Ingress" },
+    { "id": "c", "text": "IngressRoute automatically provisions TLS certificates from Let's Encrypt without any configuration" },
+    { "id": "d", "text": "IngressRoute is a cluster-scoped resource, while Ingress is namespace-scoped" }
+  ],
+  "correct_option": "b",
+  "explanation": "The standard Kubernetes Ingress spec is intentionally minimal — complex features require non-portable annotations. Traefik's `IngressRoute` CRD expresses routing rules natively in typed YAML: middleware chains (auth, rate-limit, strip-prefix), TCP/UDP routes, weighted load balancing, and route priority. Let's Encrypt requires a separate ACME resolver configuration in both Ingress and IngressRoute. Both resource types are namespace-scoped.",
+  "hints": [
+    {
+      "title": "Listing IngressRoutes",
+      "body": "IngressRoute is a Traefik CRD. Use kubectl to list them the same way you would any other resource.",
+      "command": "kubectl get ingressroute -A"
+    }
+  ],
+  "setup_commands": [],
+  "teardown_commands": [],
+  "default_namespace": "traefik"
+}

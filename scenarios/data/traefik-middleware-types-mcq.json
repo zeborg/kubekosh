@@ -1,0 +1,27 @@
+{
+  "id": "traefik-middleware-types-mcq",
+  "title": "Traefik Middleware Use Cases",
+  "category": "Traefik",
+  "difficulty": "Medium",
+  "type": "mcq",
+  "weight": 4,
+  "description": "## Traefik Middleware Use Cases\n\nTraefik middlewares are chainable request/response transformers attached to routers. Each middleware type has a distinct purpose.\n\nA developer wants to remove the `/api` prefix from all requests before they reach the backend service — e.g., `/api/users` should become `/users`. Which Traefik middleware achieves this?",
+  "options": [
+    { "id": "a", "text": "ReplacePathRegex — replaces the full path using a regular expression" },
+    { "id": "b", "text": "AddPrefix — prepends a path segment to every incoming request" },
+    { "id": "c", "text": "StripPrefix — removes a leading path prefix before forwarding to the backend" },
+    { "id": "d", "text": "RedirectScheme — redirects the request to a different URL scheme" }
+  ],
+  "correct_option": "c",
+  "explanation": "StripPrefix removes one or more leading path prefixes before the request reaches the backend. For example, with `prefixes: [\"/api\"]`, a request to `/api/users` is forwarded to the backend as `/users`. AddPrefix does the opposite — it prepends. ReplacePathRegex rewrites the full path via regex. RedirectScheme sends a redirect response (e.g., HTTP → HTTPS) rather than modifying the forwarded path.",
+  "hints": [
+    {
+      "title": "Listing middlewares in the cluster",
+      "body": "Middlewares are namespace-scoped CRDs. They must be in the same namespace as the IngressRoute that references them (or referenced with a namespace prefix).",
+      "command": "kubectl get middleware -A"
+    }
+  ],
+  "setup_commands": [],
+  "teardown_commands": [],
+  "default_namespace": "traefik"
+}

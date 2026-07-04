@@ -1,0 +1,52 @@
+{
+  "id": "traefik-stripprefix-middleware-task",
+  "title": "Strip Path Prefix with Middleware",
+  "category": "Traefik",
+  "difficulty": "Medium",
+  "type": "task",
+  "weight": 5,
+  "description": "## Strip Path Prefix with Middleware\n\nBackend services often expect requests at the root path `/`, but your router matches a sub-path like `/api`. The `StripPrefix` middleware bridges this gap by removing the prefix before the request reaches the backend.\n\n**Your task:**\n\nIn the `traefik-lab` namespace:\n1. Create a `Middleware` named `strip-api` with `StripPrefix` configured to remove the `/api` prefix.\n2. Update the existing `IngressRoute` named `api-route` to attach the `strip-api` middleware to its route.\n\n```bash\n# Verify middleware:\nkubectl get middleware strip-api -n traefik-lab -o jsonpath='{.spec.stripPrefix.prefixes[0]}'\n# Verify middleware is attached to IngressRoute:\nkubectl get ingressroute api-route -n traefik-lab -o jsonpath='{.spec.routes[0].middlewares[0].name}'\n```",
+  "hints": [
+    {
+      "title": "Middleware and IngressRoute YAML",
+      "body": "Create the Middleware first, then patch or re-apply the IngressRoute referencing it by name in the middlewares list.",
+      "command": "kubectl apply -f - <<'EOF'\napiVersion: traefik.io/v1alpha1\nkind: Middleware\nmetadata:\n  name: strip-api\n  namespace: traefik-lab\nspec:\n  stripPrefix:\n    prefixes:\n    - /api\n---\napiVersion: traefik.io/v1alpha1\nkind: IngressRoute\nmetadata:\n  name: api-route\n  namespace: traefik-lab\nspec:\n  entryPoints:\n  - web\n  routes:\n  - match: PathPrefix(`/api`)\n    kind: Rule\n    middlewares:\n    - name: strip-api\n    services:\n    - name: backend\n      port: 80\nEOF"
+    }
+  ],
+  "setup_commands": [
+    { "command": "kubectl create namespace traefik-lab 2>/dev/null || true" },
+    { "command": "kubectl delete middleware strip-api -n traefik-lab --ignore-not-found" },
+    {
+      "command": "kubectl apply -f - <<'EOF'\napiVersion: traefik.io/v1alpha1\nkind: IngressRoute\nmetadata:\n  name: api-route\n  namespace: traefik-lab\nspec:\n  entryPoints:\n  - web\n  routes:\n  - match: PathPrefix(`/api`)\n    kind: Rule\n    services:\n    - name: backend\n      port: 80\nEOF"
+    }
+  ],
+  "teardown_commands": [
+    { "command": "kubectl delete middleware strip-api -n traefik-lab --ignore-not-found" },
+    { "command": "kubectl delete ingressroute api-route -n traefik-lab --ignore-not-found" },
+    { "command": "kubectl delete namespace traefik-lab --ignore-not-found" }
+  ],
+  "default_namespace": "traefik-lab",
+  "validation": {
+    "description": "Check that the StripPrefix middleware exists and is attached to the IngressRoute",
+    "commands": [
+      {
+        "description": "Middleware strip-api exists",
+        "command": "kubectl get middleware strip-api -n traefik-lab -o jsonpath='{.metadata.name}'",
+        "expected_output": "strip-api",
+        "match": "exact"
+      },
+      {
+        "description": "StripPrefix prefix is /api",
+        "command": "kubectl get middleware strip-api -n traefik-lab -o jsonpath='{.spec.stripPrefix.prefixes[0]}'",
+        "expected_output": "/api",
+        "match": "exact"
+      },
+      {
+        "description": "IngressRoute api-route references strip-api middleware",
+        "command": "kubectl get ingressroute api-route -n traefik-lab -o jsonpath='{.spec.routes[0].middlewares[0].name}'",
+        "expected_output": "strip-api",
+        "match": "exact"
+      }
+    ]
+  }
+}

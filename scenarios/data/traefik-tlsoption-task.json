@@ -1,0 +1,61 @@
+{
+  "id": "traefik-tlsoption-task",
+  "title": "Enforce Minimum TLS Version with TLSOption",
+  "category": "Traefik",
+  "difficulty": "Hard",
+  "type": "task",
+  "weight": 7,
+  "description": "## Enforce Minimum TLS Version with TLSOption\n\nTraefik's `TLSOption` CRD controls the TLS handshake parameters for HTTPS routes: minimum/maximum protocol versions, cipher suites, and client certificate requirements. Enforcing a minimum TLS version is a security baseline requirement in most compliance frameworks.\n\n**Your task:**\n\nIn the `traefik-lab` namespace:\n1. Create a `TLSOption` named `modern-tls` that:\n   - Sets `minVersion` to `VersionTLS12`\n   - Disables TLS 1.0 and 1.1 by specifying only `VersionTLS12` and `VersionTLS13` in `sniStrict` is not required\n2. Create an `IngressRouteHTTPS` (i.e., an `IngressRoute` on the `websecure` EntryPoint) named `secure-app` that references `modern-tls` via its `tls.options` field, routing `PathPrefix(\\`/\\`)` to a service named `secure-backend` on port `443`.\n\n```bash\n# Verify TLSOption:\nkubectl get tlsoption modern-tls -n traefik-lab -o jsonpath='{.spec.minVersion}'\n# Verify IngressRoute references it:\nkubectl get ingressroute secure-app -n traefik-lab -o jsonpath='{.spec.tls.options.name}'\n```",
+  "hints": [
+    {
+      "title": "TLSOption resource structure",
+      "body": "TLSOption is a Traefik CRD. The minVersion field accepts VersionTLS10, VersionTLS11, VersionTLS12, or VersionTLS13.",
+      "command": "kubectl apply -f - <<EOF\napiVersion: traefik.io/v1alpha1\nkind: TLSOption\nmetadata:\n  name: modern-tls\n  namespace: traefik-lab\nspec:\n  minVersion: VersionTLS12\nEOF"
+    },
+    {
+      "title": "IngressRoute with TLS options reference",
+      "body": "Reference the TLSOption in the IngressRoute's spec.tls.options block using name and namespace.",
+      "command": "kubectl apply -f - <<'EOF'\napiVersion: traefik.io/v1alpha1\nkind: IngressRoute\nmetadata:\n  name: secure-app\n  namespace: traefik-lab\nspec:\n  entryPoints:\n  - websecure\n  routes:\n  - match: PathPrefix(`/`)\n    kind: Rule\n    services:\n    - name: secure-backend\n      port: 443\n  tls:\n    options:\n      name: modern-tls\n      namespace: traefik-lab\nEOF"
+    }
+  ],
+  "setup_commands": [
+    { "command": "kubectl create namespace traefik-lab 2>/dev/null || true" },
+    { "command": "kubectl delete tlsoption modern-tls -n traefik-lab --ignore-not-found" },
+    { "command": "kubectl delete ingressroute secure-app -n traefik-lab --ignore-not-found" }
+  ],
+  "teardown_commands": [
+    { "command": "kubectl delete tlsoption modern-tls -n traefik-lab --ignore-not-found" },
+    { "command": "kubectl delete ingressroute secure-app -n traefik-lab --ignore-not-found" },
+    { "command": "kubectl delete namespace traefik-lab --ignore-not-found" }
+  ],
+  "default_namespace": "traefik-lab",
+  "validation": {
+    "description": "Check that TLSOption enforces TLS 1.2 minimum and the IngressRoute references it",
+    "commands": [
+      {
+        "description": "TLSOption modern-tls exists",
+        "command": "kubectl get tlsoption modern-tls -n traefik-lab -o jsonpath='{.metadata.name}'",
+        "expected_output": "modern-tls",
+        "match": "exact"
+      },
+      {
+        "description": "minVersion is VersionTLS12",
+        "command": "kubectl get tlsoption modern-tls -n traefik-lab -o jsonpath='{.spec.minVersion}'",
+        "expected_output": "VersionTLS12",
+        "match": "exact"
+      },
+      {
+        "description": "IngressRoute secure-app exists on websecure EntryPoint",
+        "command": "kubectl get ingressroute secure-app -n traefik-lab -o jsonpath='{.spec.entryPoints[0]}'",
+        "expected_output": "websecure",
+        "match": "exact"
+      },
+      {
+        "description": "IngressRoute tls.options references modern-tls",
+        "command": "kubectl get ingressroute secure-app -n traefik-lab -o jsonpath='{.spec.tls.options.name}'",
+        "expected_output": "modern-tls",
+        "match": "exact"
+      }
+    ]
+  }
+}

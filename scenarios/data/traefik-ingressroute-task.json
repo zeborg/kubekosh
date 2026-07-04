@@ -1,0 +1,58 @@
+{
+  "id": "traefik-ingressroute-task",
+  "title": "Create a Traefik IngressRoute",
+  "category": "Traefik",
+  "difficulty": "Easy",
+  "type": "task",
+  "weight": 4,
+  "description": "## Create a Traefik IngressRoute\n\nAn `IngressRoute` is Traefik's native CRD for routing HTTP traffic to a backend Service. It replaces the standard Kubernetes `Ingress` with a richer, more expressive syntax.\n\n**Your task:**\n\nA Service named `web-app` is running in the `traefik-lab` namespace on port `80`. Create an `IngressRoute` named `web-app-route` in the same namespace that:\n- Listens on the `web` EntryPoint\n- Routes all requests matching `PathPrefix(\\`/app\\`)` to the `web-app` Service on port `80`\n\n```bash\n# Verify:\nkubectl get ingressroute web-app-route -n traefik-lab -o jsonpath='{.spec.routes[0].match}'\n```",
+  "hints": [
+    {
+      "title": "IngressRoute structure",
+      "body": "An IngressRoute references an EntryPoint by name and defines one or more routes with a match rule and a list of backend services.",
+      "command": "kubectl apply -f - <<'EOF'\napiVersion: traefik.io/v1alpha1\nkind: IngressRoute\nmetadata:\n  name: web-app-route\n  namespace: traefik-lab\nspec:\n  entryPoints:\n  - web\n  routes:\n  - match: PathPrefix(`/app`)\n    kind: Rule\n    services:\n    - name: web-app\n      port: 80\nEOF"
+    }
+  ],
+  "setup_commands": [
+    { "command": "kubectl create namespace traefik-lab 2>/dev/null || true" },
+    { "command": "kubectl delete ingressroute web-app-route -n traefik-lab --ignore-not-found" },
+    { "command": "kubectl create deployment web-app --image=nginx:alpine -n traefik-lab 2>/dev/null || true" },
+    { "command": "kubectl expose deployment web-app --port=80 -n traefik-lab 2>/dev/null || true" }
+  ],
+  "teardown_commands": [
+    { "command": "kubectl delete ingressroute web-app-route -n traefik-lab --ignore-not-found" },
+    { "command": "kubectl delete service web-app -n traefik-lab --ignore-not-found" },
+    { "command": "kubectl delete deployment web-app -n traefik-lab --ignore-not-found" },
+    { "command": "kubectl delete namespace traefik-lab --ignore-not-found" }
+  ],
+  "default_namespace": "traefik-lab",
+  "validation": {
+    "description": "Check that IngressRoute web-app-route exists with the correct rule and backend",
+    "commands": [
+      {
+        "description": "IngressRoute web-app-route exists",
+        "command": "kubectl get ingressroute web-app-route -n traefik-lab -o jsonpath='{.metadata.name}'",
+        "expected_output": "web-app-route",
+        "match": "exact"
+      },
+      {
+        "description": "EntryPoint is web",
+        "command": "kubectl get ingressroute web-app-route -n traefik-lab -o jsonpath='{.spec.entryPoints[0]}'",
+        "expected_output": "web",
+        "match": "exact"
+      },
+      {
+        "description": "Route match rule contains PathPrefix(/app)",
+        "command": "kubectl get ingressroute web-app-route -n traefik-lab -o jsonpath='{.spec.routes[0].match}'",
+        "expected_output": "/app",
+        "match": "contains"
+      },
+      {
+        "description": "Backend service is web-app on port 80",
+        "command": "kubectl get ingressroute web-app-route -n traefik-lab -o jsonpath='{.spec.routes[0].services[0].name}'",
+        "expected_output": "web-app",
+        "match": "exact"
+      }
+    ]
+  }
+}

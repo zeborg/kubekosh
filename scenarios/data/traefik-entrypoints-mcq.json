@@ -1,0 +1,27 @@
+{
+  "id": "traefik-entrypoints-mcq",
+  "title": "Traefik EntryPoints Explained",
+  "category": "Traefik",
+  "difficulty": "Easy",
+  "type": "mcq",
+  "weight": 3,
+  "description": "## Traefik EntryPoints Explained\n\nTraefik uses **EntryPoints** as the first layer of its routing model.\n\nWhich of the following best describes what a Traefik EntryPoint is?",
+  "options": [
+    { "id": "a", "text": "A Kubernetes Service that exposes Traefik to external traffic" },
+    { "id": "b", "text": "A named network listener (port + protocol) where Traefik receives incoming connections" },
+    { "id": "c", "text": "A middleware that rewrites incoming request URLs before routing" },
+    { "id": "d", "text": "A Helm value that controls the number of Traefik replicas" }
+  ],
+  "correct_option": "b",
+  "explanation": "An EntryPoint is a named network listener — it defines the port and protocol (TCP, UDP, HTTP) on which Traefik listens for incoming traffic. Common built-in names are `web` (port 80) and `websecure` (port 443). Routers then reference an EntryPoint to declare which listener should handle their traffic. EntryPoints are not Kubernetes resources; they are configured in Traefik's static configuration (Helm values or CLI flags).",
+  "hints": [
+    {
+      "title": "Checking available EntryPoints",
+      "body": "In a Helm-installed Traefik, EntryPoints are set via Helm values. You can inspect the running config via the Traefik API.",
+      "command": "kubectl get svc -n traefik"
+    }
+  ],
+  "setup_commands": [],
+  "teardown_commands": [],
+  "default_namespace": "traefik"
+}

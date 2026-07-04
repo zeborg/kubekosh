@@ -1,0 +1,21 @@
+{
+  "id": "6-traefik",
+  "name": "Traefik Ingress",
+  "icon": "🚦",
+  "tagline": "Cloud-native ingress, routing, and middleware with Traefik",
+  "color": "#0ea5e9",
+  "colorDim": "rgba(14,165,233,0.12)",
+  "exam_minutes": 60,
+  "scenario_ids": [
+    "traefik-entrypoints-mcq",
+    "traefik-ingressroute-vs-ingress-mcq",
+    "traefik-middleware-types-mcq",
+    "traefik-routing-priority-mcq",
+    "traefik-ingressroute-task",
+    "traefik-stripprefix-middleware-task",
+    "traefik-basicauth-middleware-task",
+    "traefik-redirect-middleware-task",
+    "traefik-ratelimit-middleware-task",
+    "traefik-tlsoption-task"
+  ]
+}

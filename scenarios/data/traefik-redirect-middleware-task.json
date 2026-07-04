@@ -1,0 +1,61 @@
+{
+  "id": "traefik-redirect-middleware-task",
+  "title": "Redirect HTTP to HTTPS with Middleware",
+  "category": "Traefik",
+  "difficulty": "Medium",
+  "type": "task",
+  "weight": 6,
+  "description": "## Redirect HTTP to HTTPS with Middleware\n\nA common production pattern is to enforce HTTPS by permanently redirecting all HTTP traffic. Traefik's `RedirectScheme` middleware handles this at the proxy layer — no application code changes required.\n\n**Your task:**\n\nIn the `traefik-lab` namespace:\n1. Create a `Middleware` named `redirect-to-https` using `RedirectScheme` configured to redirect to `https` with a **permanent** redirect (301).\n2. Create an `IngressRoute` named `http-catch-all` on the `web` EntryPoint that matches `HostRegexp(\\`{host:.+}\\`)` and applies the `redirect-to-https` middleware. The `services` list should be empty (redirects do not need a backend).\n\n```bash\n# Verify middleware:\nkubectl get middleware redirect-to-https -n traefik-lab -o jsonpath='{.spec.redirectScheme.scheme}'\n# Verify permanent flag:\nkubectl get middleware redirect-to-https -n traefik-lab -o jsonpath='{.spec.redirectScheme.permanent}'\n```",
+  "hints": [
+    {
+      "title": "RedirectScheme middleware structure",
+      "body": "Set spec.redirectScheme.scheme to 'https' and spec.redirectScheme.permanent to true for a 301. A 302 is issued when permanent is false or omitted.",
+      "command": "kubectl apply -f - <<EOF\napiVersion: traefik.io/v1alpha1\nkind: Middleware\nmetadata:\n  name: redirect-to-https\n  namespace: traefik-lab\nspec:\n  redirectScheme:\n    scheme: https\n    permanent: true\nEOF"
+    },
+    {
+      "title": "IngressRoute for the catch-all redirect",
+      "body": "The route that performs the redirect does not need a backend service. Use an empty services list.",
+      "command": "kubectl apply -f - <<'EOF'\napiVersion: traefik.io/v1alpha1\nkind: IngressRoute\nmetadata:\n  name: http-catch-all\n  namespace: traefik-lab\nspec:\n  entryPoints:\n  - web\n  routes:\n  - match: HostRegexp(`{host:.+}`)\n    kind: Rule\n    middlewares:\n    - name: redirect-to-https\n    services: []\nEOF"
+    }
+  ],
+  "setup_commands": [
+    { "command": "kubectl create namespace traefik-lab 2>/dev/null || true" },
+    { "command": "kubectl delete middleware redirect-to-https -n traefik-lab --ignore-not-found" },
+    { "command": "kubectl delete ingressroute http-catch-all -n traefik-lab --ignore-not-found" }
+  ],
+  "teardown_commands": [
+    { "command": "kubectl delete middleware redirect-to-https -n traefik-lab --ignore-not-found" },
+    { "command": "kubectl delete ingressroute http-catch-all -n traefik-lab --ignore-not-found" },
+    { "command": "kubectl delete namespace traefik-lab --ignore-not-found" }
+  ],
+  "default_namespace": "traefik-lab",
+  "validation": {
+    "description": "Check that the redirect middleware and catch-all IngressRoute are correctly configured",
+    "commands": [
+      {
+        "description": "Middleware redirect-to-https exists",
+        "command": "kubectl get middleware redirect-to-https -n traefik-lab -o jsonpath='{.metadata.name}'",
+        "expected_output": "redirect-to-https",
+        "match": "exact"
+      },
+      {
+        "description": "RedirectScheme target is https",
+        "command": "kubectl get middleware redirect-to-https -n traefik-lab -o jsonpath='{.spec.redirectScheme.scheme}'",
+        "expected_output": "https",
+        "match": "exact"
+      },
+      {
+        "description": "Redirect is permanent (301)",
+        "command": "kubectl get middleware redirect-to-https -n traefik-lab -o jsonpath='{.spec.redirectScheme.permanent}'",
+        "expected_output": "true",
+        "match": "exact"
+      },
+      {
+        "description": "IngressRoute http-catch-all references redirect-to-https middleware",
+        "command": "kubectl get ingressroute http-catch-all -n traefik-lab -o jsonpath='{.spec.routes[0].middlewares[0].name}'",
+        "expected_output": "redirect-to-https",
+        "match": "exact"
+      }
+    ]
+  }
+}

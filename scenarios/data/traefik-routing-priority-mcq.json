@@ -1,0 +1,27 @@
+{
+  "id": "traefik-routing-priority-mcq",
+  "title": "Traefik Router Rule Priority",
+  "category": "Traefik",
+  "difficulty": "Medium",
+  "type": "mcq",
+  "weight": 4,
+  "description": "## Traefik Router Rule Priority\n\nWhen multiple Traefik routers could match the same incoming request, Traefik must choose one.\n\nHow does Traefik determine which router wins when two routers match the same request and neither has an explicit `priority` field set?",
+  "options": [
+    { "id": "a", "text": "The router defined first in the configuration file wins" },
+    { "id": "b", "text": "The router with the alphabetically earlier name wins" },
+    { "id": "c", "text": "The router whose rule string is longest (most specific) wins — rule length is used as the default priority" },
+    { "id": "d", "text": "Traefik returns a 503 error when two routers match the same request" }
+  ],
+  "correct_option": "c",
+  "explanation": "Traefik uses the **length of the rule string** as the default priority — a longer rule is considered more specific and wins. For example, `PathPrefix('/api/v2')` (length 18) beats `PathPrefix('/api')` (length 12). You can override this behaviour by setting an explicit integer `priority` field on the router (higher value = higher priority). Traefik never returns a 503 solely due to rule conflicts.",
+  "hints": [
+    {
+      "title": "Inspecting router priorities in the dashboard",
+      "body": "The Traefik dashboard (at /traefik/dashboard/) shows all registered routers with their computed priority. Useful for debugging unexpected routing behaviour.",
+      "command": "kubectl get ingressroute -A -o jsonpath='{range .items[*]}{.metadata.name}{\"\\t\"}{.spec.routes[*].match}{\"\\n\"}{end}'"
+    }
+  ],
+  "setup_commands": [],
+  "teardown_commands": [],
+  "default_namespace": "traefik"
+}

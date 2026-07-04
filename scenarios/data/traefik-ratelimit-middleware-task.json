@@ -1,0 +1,63 @@
+{
+  "id": "traefik-ratelimit-middleware-task",
+  "title": "Rate-Limit a Route with Middleware",
+  "category": "Traefik",
+  "difficulty": "Medium",
+  "type": "task",
+  "weight": 6,
+  "description": "## Rate-Limit a Route with Middleware\n\nTraefik's `RateLimit` middleware uses a token-bucket algorithm to cap the number of requests allowed through a route per time window. This protects backend services from traffic spikes and abuse.\n\n**Your task:**\n\nIn the `traefik-lab` namespace:\n1. Create a `Middleware` named `rate-limit` with `RateLimit` configured to allow a maximum of **10 requests per second** (`average: 10`) and a burst capacity of **20** (`burst: 20`).\n2. Attach this middleware to the existing `IngressRoute` named `api-route` (already present in the namespace).\n\n```bash\n# Verify middleware:\nkubectl get middleware rate-limit -n traefik-lab -o jsonpath='{.spec.rateLimit.average}'\n# Verify it is attached:\nkubectl get ingressroute api-route -n traefik-lab -o jsonpath='{.spec.routes[0].middlewares[0].name}'\n```",
+  "hints": [
+    {
+      "title": "RateLimit middleware structure",
+      "body": "The average field sets the steady-state request rate (requests/second). The burst field allows short spikes above the average.",
+      "command": "kubectl apply -f - <<EOF\napiVersion: traefik.io/v1alpha1\nkind: Middleware\nmetadata:\n  name: rate-limit\n  namespace: traefik-lab\nspec:\n  rateLimit:\n    average: 10\n    burst: 20\nEOF"
+    },
+    {
+      "title": "Patching the IngressRoute",
+      "body": "Re-apply the IngressRoute with the middleware added to the middlewares list, or use kubectl patch.",
+      "command": "kubectl patch ingressroute api-route -n traefik-lab --type=json -p='[{\"op\":\"add\",\"path\":\"/spec/routes/0/middlewares\",\"value\":[{\"name\":\"rate-limit\"}]}]'"
+    }
+  ],
+  "setup_commands": [
+    { "command": "kubectl create namespace traefik-lab 2>/dev/null || true" },
+    { "command": "kubectl delete middleware rate-limit -n traefik-lab --ignore-not-found" },
+    {
+      "command": "kubectl apply -f - <<'EOF'\napiVersion: traefik.io/v1alpha1\nkind: IngressRoute\nmetadata:\n  name: api-route\n  namespace: traefik-lab\nspec:\n  entryPoints:\n  - web\n  routes:\n  - match: PathPrefix(`/api`)\n    kind: Rule\n    services:\n    - name: backend\n      port: 80\nEOF"
+    }
+  ],
+  "teardown_commands": [
+    { "command": "kubectl delete middleware rate-limit -n traefik-lab --ignore-not-found" },
+    { "command": "kubectl delete ingressroute api-route -n traefik-lab --ignore-not-found" },
+    { "command": "kubectl delete namespace traefik-lab --ignore-not-found" }
+  ],
+  "default_namespace": "traefik-lab",
+  "validation": {
+    "description": "Check that the RateLimit middleware exists with correct values and is attached to api-route",
+    "commands": [
+      {
+        "description": "Middleware rate-limit exists",
+        "command": "kubectl get middleware rate-limit -n traefik-lab -o jsonpath='{.metadata.name}'",
+        "expected_output": "rate-limit",
+        "match": "exact"
+      },
+      {
+        "description": "average is 10",
+        "command": "kubectl get middleware rate-limit -n traefik-lab -o jsonpath='{.spec.rateLimit.average}'",
+        "expected_output": "10",
+        "match": "exact"
+      },
+      {
+        "description": "burst is 20",
+        "command": "kubectl get middleware rate-limit -n traefik-lab -o jsonpath='{.spec.rateLimit.burst}'",
+        "expected_output": "20",
+        "match": "exact"
+      },
+      {
+        "description": "IngressRoute api-route references rate-limit middleware",
+        "command": "kubectl get ingressroute api-route -n traefik-lab -o jsonpath='{.spec.routes[0].middlewares[0].name}'",
+        "expected_output": "rate-limit",
+        "match": "exact"
+      }
+    ]
+  }
+}
