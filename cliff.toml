@@ -1,11 +1,39 @@
 [changelog]
 body = """
+{% if release.version %}
+    ## [{{ release.version | trim_start_matches(pat="v") }}] - {{ release.timestamp | date(format="%Y-%m-%d") }}
+{% else %}
+    ## [unreleased]
+{% endif %}
 {% for group, commits in commits | group_by(attribute="group") %}
-### {{ group | upper_first }}
+### {{ group | striptags | trim | upper_first }}
 {% for commit in commits %}
-- {{ commit.message | split(pat="\n") | first | upper_first | trim }}{% if commit.remote.username %} - @{{ commit.remote.username }}{% elif commit.author.name %} - **{{ commit.author.name }}**{% endif %}{% if commit.breaking %} [**breaking**]{% endif %}
+- {% if commit.scope %}*({{ commit.scope }})* {% endif %}{{ commit.description | upper_first | trim }}{% if commit.remote.username %} by [@{{ commit.remote.username }}](https://github.com/{{ commit.remote.username }}){% elif commit.author.name %} by **{{ commit.author.name }}**{% endif %}{% if commit.breaking %} [**breaking**]{% endif %}
 {% endfor %}
 {% endfor %}
+
+{% set returning = github.contributors | filter(attribute="is_first_time", value=false) | unique(attribute="username") %}
+{% set newcomers = github.contributors | filter(attribute="is_first_time", value=true) %}
+
+{% if returning %}
+### Contributors
+{% for contributor in returning %}
+- [@{{ contributor.username }}](https://github.com/{{ contributor.username }})
+{% endfor %}
+{% endif %}
+
+{% if newcomers %}
+### New Contributors
+{% for contributor in newcomers %}
+- [@{{ contributor.username }}](https://github.com/{{ contributor.username }}) made their first contribution in [#{{ contributor.pr_number }}](https://github.com/{{ remote.github.owner }}/{{ remote.github.repo }}/pull/{{ contributor.pr_number }})
+{% endfor %}
+{% endif %}
+
+{% if release.previous.version %}
+**Full Changelog**: https://github.com/{{ remote.github.owner }}/{{ remote.github.repo }}/compare/{{ release.previous.version }}...{{ release.version }}
+{% else %}
+**Full Changelog**: https://github.com/{{ remote.github.owner }}/{{ remote.github.repo }}/commits/{{ release.version }}
+{% endif %}
 """
 trim = true
 
@@ -34,3 +62,7 @@ commit_parsers = [
   { message = "^revert", group = "<!-- 9 -->◀️ Revert" },
   { message = ".*", group = "<!-- 10 -->💼 Other" },
 ]
+
+[remote.github]
+owner = "zeborg"
+repo = "kubekosh"
