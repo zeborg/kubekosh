@@ -129,6 +129,8 @@ done
 # ── 4. Shell environment ─────────────────────────────────────────────────────
 LOG "Configuring shell environment..."
 
+if [ ! -f /root/.kubekosh_initialized ]; then
+
 # Persistent install target for OS-level addons (on the /data mount so it
 # survives container restarts); put it on PATH for the interactive terminal.
 mkdir -p /data/addons/bin
@@ -176,7 +178,12 @@ echo "             kgd=get deployments, kgn=get nodes, kgs=get services, kdp=des
 echo ""
 BASHRC
 
+touch /root/.kubekosh_initialized
+
 OK "Shell configured"
+else
+OK "Shell already configured, skipping"
+fi
 
 # ── 5. k3s watchdog — restart k3s if it crashes ─────────────────────────────
 # This loop detects if k3s has crashed and restarts it, keeping the cluster available.
