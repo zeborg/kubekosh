@@ -147,41 +147,60 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         continue-on-error: true
 
+      - name: Compose release body
+        id: release_body
+        env:
+          CHANGELOG: ${{ steps.changelog.outputs.content }}
+        run: |
+          {
+            echo 'content<<RELEASE_BODY_EOF'
+            if [ "${{ env.IS_PRERELEASE }}" = "true" ]; then
+              echo '> ⚠️ **This is a pre-release.** It may be unstable. Do not use in production without testing.'
+              echo ''
+            fi
+            echo '## Docker image'
+            echo ''
+            echo '```'
+            echo 'docker pull ${{ secrets.DOCKERHUB_USERNAME }}/${{ github.event.repository.name }}:${{ github.ref_name }}'
+            echo '```'
+            echo ''
+            if [ "${{ env.IS_PRERELEASE }}" = "true" ]; then
+              CHANNEL="${{ contains(github.ref_name, '-rc') && 'rc' || contains(github.ref_name, '-beta') && 'beta' || contains(github.ref_name, '-alpha') && 'alpha' || 'edge' }}"
+              echo 'You can also pull the rolling pre-release channel tag:'
+              echo '```'
+              echo "docker pull ${{ secrets.DOCKERHUB_USERNAME }}/${{ github.event.repository.name }}:${CHANNEL}"
+              echo '```'
+              echo ''
+            fi
+            echo '## Supply chain security'
+            echo ''
+            echo 'This release includes:'
+            echo '- **Build provenance attestation** — verifiable record of how and where the image was built'
+            echo '- **SBOM** (Software Bill of Materials) — full inventory of packages inside the image'
+            echo ''
+            echo 'Verify with the GitHub CLI:'
+            echo '```'
+            echo 'gh attestation verify oci://docker.io/${{ secrets.DOCKERHUB_USERNAME }}/${{ github.event.repository.name }}:${{ github.ref_name }} \'
+            echo '  --repo ${{ github.repository }}'
+            echo '```'
+            echo ''
+            echo 'Or scan for vulnerabilities using [Grype](https://github.com/anchore/grype):'
+            echo '```'
+            echo 'grype ${{ secrets.DOCKERHUB_USERNAME }}/${{ github.event.repository.name }}:${{ github.ref_name }}'
+            echo '```'
+            echo ''
+            echo "$CHANGELOG"
+            echo 'RELEASE_BODY_EOF'
+          } >> "$GITHUB_OUTPUT"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
+        env:
+          RELEASE_BODY: ${{ steps.release_body.outputs.content }}
         with:
           tag_name: ${{ github.ref_name }}
           name: ${{ env.IS_PRERELEASE == 'true' && format('Pre-release {0}', github.ref_name) || format('Release {0}', github.ref_name) }}
-          body: |
-            ${{ env.IS_PRERELEASE == 'true' && '> ⚠️ **This is a pre-release.** It may be unstable. Do not use in production without testing.' || '' }}
-
-            ## Docker image
-
-            ```
-            docker pull ${{ secrets.DOCKERHUB_USERNAME }}/${{ github.event.repository.name }}:${{ github.ref_name }}
-            ```
-
-            ${{ env.IS_PRERELEASE == 'true' && format('You can also pull the rolling pre-release channel tag:\n```\ndocker pull {0}/{1}:{2}\n```', secrets.DOCKERHUB_USERNAME, github.event.repository.name, contains(github.ref_name, '-rc') && 'rc' || contains(github.ref_name, '-beta') && 'beta' || contains(github.ref_name, '-alpha') && 'alpha' || 'edge') || '' }}
-
-            ## Supply chain security
-
-            This release includes:
-            - **Build provenance attestation** — verifiable record of how and where the image was built
-            - **SBOM** (Software Bill of Materials) — full inventory of packages inside the image
-
-            Verify with the GitHub CLI:
-            ```
-            gh attestation verify oci://docker.io/${{ secrets.DOCKERHUB_USERNAME }}/${{ github.event.repository.name }}:${{ github.ref_name }} \
-              --repo ${{ github.repository }}
-            ```
-
-            Or scan for vulnerabilities using [Grype](https://github.com/anchore/grype):
-            ```
-            grype ${{ secrets.DOCKERHUB_USERNAME }}/${{ github.event.repository.name }}:${{ github.ref_name }}
-            ```
-
-            ${{ steps.changelog.outputs.content }}
+          body: ${{ env.RELEASE_BODY }}
           files: release-assets/**
           draft: false
           prerelease: ${{ env.IS_PRERELEASE == 'true' }}
