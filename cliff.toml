@@ -18,14 +18,14 @@ body = """
 {% if returning %}
 ### Contributors
 {% for contributor in returning %}
-- [@{{ contributor.username }}](https://github.com/{{ contributor.username }})
+- @{{ contributor.username }}
 {% endfor %}
 {% endif %}
 
 {% if newcomers %}
 ### New Contributors
 {% for contributor in newcomers %}
-- [@{{ contributor.username }}](https://github.com/{{ contributor.username }}) made their first contribution in [#{{ contributor.pr_number }}](https://github.com/{{ remote.github.owner }}/{{ remote.github.repo }}/pull/{{ contributor.pr_number }})
+- @{{ contributor.username }} made their first contribution in #{{ contributor.pr_number }}
 {% endfor %}
 {% endif %}
 
