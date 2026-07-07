@@ -1,0 +1,27 @@
+{
+  "id": "falco-priorities-mcq",
+  "title": "Falco Alert Priorities",
+  "category": "Falco",
+  "difficulty": "Medium",
+  "type": "mcq",
+  "weight": 3,
+  "description": "## Falco Alert Priorities\n\nFalco rules specify a `priority` level to indicate the severity of the threat detected.\n\nWhich of the following priority levels is NOT a valid Falco alert priority?\n\nChoose the correct option:",
+  "options": [
+    { "id": "a", "text": "Emergency" },
+    { "id": "b", "text": "Critical" },
+    { "id": "c", "text": "Fatal" },
+    { "id": "d", "text": "Notice" }
+  ],
+  "correct_option": "c",
+  "explanation": "Falco severity/priority values are based on the standard Unix syslog protocol. The eight valid levels from highest to lowest severity are: Emergency, Alert, Critical, Error, Warning, Notice, Info, and Debug. 'Fatal' is not one of them.",
+  "hints": [
+    {
+      "title": "Falco Rule Priorities Docs",
+      "body": "Refer to the priority field guidelines on Falco's rule documentation page.",
+      "command": "echo 'See: https://falco.org/docs/rules/#priority'"
+    }
+  ],
+  "setup_commands": [],
+  "teardown_commands": [],
+  "default_namespace": "default"
+}

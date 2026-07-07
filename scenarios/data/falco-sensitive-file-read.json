@@ -1,0 +1,49 @@
+{
+  "id": "falco-sensitive-file-read",
+  "title": "Detect Sensitive File Read with Falco",
+  "category": "Falco",
+  "difficulty": "Easy",
+  "type": "task",
+  "weight": 5,
+  "description": "## Detect Sensitive File Read with Falco\n\nFalco ships with a built-in rule that alerts whenever a process reads a sensitive file such as `/etc/shadow` — a common indicator of credential harvesting. In this task, you will simulate that attack and capture the resulting Falco alert.\n\n**Prerequisite:** Ensure the **Falco** add-on is installed from the Add-ons catalog (🧩) before starting this task.\n\n**Your task:**\n\n1. Read the file `/etc/shadow` from inside the Pod named `vuln-pod` running in the namespace `falco-lab`. This triggers Falco's built-in rule `Read sensitive file untrusted` (Priority: `Warning`).\n2. Query the Falco daemon logs from the `falco` namespace (container `falco` of the Falco DaemonSet).\n3. Locate the alert log line containing `shadow` and save it to `/root/falco-alert.log`.\n\n```bash\n# Step 1 — trigger the rule:\nkubectl exec vuln-pod -n falco-lab -- cat /etc/shadow\n\n# Step 2 — capture the alert:\nkubectl logs -n falco daemonset/falco -c falco | grep 'shadow' | tail -n 1 > /root/falco-alert.log\n\n# Step 3 — verify:\ncat /root/falco-alert.log\n```",
+  "hints": [
+    {
+      "title": "Triggering the alert",
+      "body": "Read the sensitive file from inside the container to trigger the Falco rule:",
+      "command": "kubectl exec vuln-pod -n falco-lab -- cat /etc/shadow"
+    },
+    {
+      "title": "Capturing the alert log",
+      "body": "Search the Falco DaemonSet logs for the alert and redirect it to the target file:",
+      "command": "kubectl logs -n falco daemonset/falco -c falco | grep 'shadow' | tail -n 1 > /root/falco-alert.log"
+    }
+  ],
+  "setup_commands": [
+    { "command": "kubectl create namespace falco-lab 2>/dev/null || true" },
+    { "command": "kubectl run vuln-pod --image=alpine:latest -n falco-lab --restart=Never --command -- sleep 3600 2>/dev/null || true" },
+    { "command": "kubectl wait pod vuln-pod -n falco-lab --for=condition=Ready --timeout=60s 2>/dev/null || true" },
+    { "command": "rm -f /root/falco-alert.log" }
+  ],
+  "teardown_commands": [
+    { "command": "kubectl delete pod vuln-pod -n falco-lab --ignore-not-found --grace-period=0 --force" },
+    { "command": "kubectl delete namespace falco-lab --ignore-not-found" },
+    { "command": "rm -f /root/falco-alert.log" }
+  ],
+  "default_namespace": "falco-lab",
+  "validation": {
+    "commands": [
+      {
+        "description": "Alert log file /root/falco-alert.log exists",
+        "command": "[ -f /root/falco-alert.log ] && echo 'ok' || echo 'fail'",
+        "expected_output": "ok",
+        "match": "exact"
+      },
+      {
+        "description": "Alert log contains a Falco warning about reading a sensitive file",
+        "command": "cat /root/falco-alert.log",
+        "expected_output": "shadow",
+        "match": "contains"
+      }
+    ]
+  }
+}

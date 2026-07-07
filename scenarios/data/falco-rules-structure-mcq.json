@@ -1,0 +1,27 @@
+{
+  "id": "falco-rules-structure-mcq",
+  "title": "Falco Rule Schema & Composition",
+  "category": "Falco",
+  "difficulty": "Easy",
+  "type": "mcq",
+  "weight": 3,
+  "description": "## Falco Rule Schema & Composition\n\nFalco rules are defined in YAML files and dictate what system activities should trigger alerts.\n\nWhich of the following describes the correct set of required fields for a complete, standalone Falco rule definition?\n\nChoose the correct option:",
+  "options": [
+    { "id": "a", "text": "rule, condition, output, priority, desc" },
+    { "id": "b", "text": "name, trigger, action, severity" },
+    { "id": "c", "text": "policy, resource, action, message" },
+    { "id": "d", "text": "rule, filter, alert, remediation" }
+  ],
+  "correct_option": "a",
+  "explanation": "A complete Falco rule must specify the following key fields: 'rule' (a unique name), 'condition' (the filtering expression), 'output' (the formatted alert message), 'priority' (syslog priority level), and 'desc' (a description of what the rule detects).",
+  "hints": [
+    {
+      "title": "Falco Rule Anatomy Docs",
+      "body": "Rules files consist of rules, macros, and lists. Standalone rules require rule, desc, condition, output, and priority.",
+      "command": "echo 'See: https://falco.org/docs/rules/'"
+    }
+  ],
+  "setup_commands": [],
+  "teardown_commands": [],
+  "default_namespace": "default"
+}

@@ -1,0 +1,40 @@
+{
+  "id": "falco-override-priority-task",
+  "title": "Override Default Falco Rule Priority",
+  "category": "Falco",
+  "difficulty": "Medium",
+  "type": "task",
+  "weight": 6,
+  "description": "## Override Default Falco Rule Priority\n\nOrganization-specific compliance regulations may require tuning security priorities. In this task, you will override the priority of a built-in Falco rule to ensure it triggers at a higher severity level.\n\n**Your task:**\n\nCreate a Kubernetes ConfigMap named `falco-rule-overrides` in the namespace `falco` containing overrides for built-in rules.\n- The ConfigMap must have a key named `overrides.yaml` containing a YAML list.\n- It must override the existing rule named `Run shell untrusted` to set its `priority` to `CRITICAL`.\n\n```yaml\n# Expected structure inside overrides.yaml:\n- rule: Run shell untrusted\n  priority: CRITICAL\n```",
+  "hints": [
+    {
+      "title": "Creating the override ConfigMap",
+      "body": "Define the ConfigMap with overrides.yaml containing the overridden rule block:",
+      "command": "kubectl apply -f - <<'EOF'\napiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: falco-rule-overrides\n  namespace: falco\ndata:\n  overrides.yaml: |\n    - rule: Run shell untrusted\n      priority: CRITICAL\nEOF"
+    }
+  ],
+  "setup_commands": [
+    { "command": "kubectl create namespace falco 2>/dev/null || true" },
+    { "command": "kubectl delete configmap falco-rule-overrides -n falco --ignore-not-found" }
+  ],
+  "teardown_commands": [
+    { "command": "kubectl delete configmap falco-rule-overrides -n falco --ignore-not-found" }
+  ],
+  "default_namespace": "falco",
+  "validation": {
+    "commands": [
+      {
+        "description": "ConfigMap falco-rule-overrides exists in namespace falco",
+        "command": "kubectl get configmap falco-rule-overrides -n falco -o jsonpath='{.metadata.name}'",
+        "expected_output": "falco-rule-overrides",
+        "match": "exact"
+      },
+      {
+        "description": "ConfigMap contains overrides.yaml with Run shell untrusted priority set to CRITICAL",
+        "command": "python3 -c 'import yaml, subprocess; out = subprocess.check_output([\"kubectl\", \"get\", \"configmap\", \"falco-rule-overrides\", \"-n\", \"falco\", \"-o\", \"jsonpath={.data.overrides\\\\.yaml}\"]); data = yaml.safe_load(out); rules = [x for x in data if isinstance(x, dict) and x.get(\"rule\") == \"Run shell untrusted\"]; print(\"ok\" if rules and rules[0].get(\"priority\") == \"CRITICAL\" else \"fail\")'",
+        "expected_output": "ok",
+        "match": "exact"
+      }
+    ]
+  }
+}

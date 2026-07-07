@@ -1,0 +1,35 @@
+{
+  "id": "falco-kubernetes-audit-task",
+  "title": "Enable Kubernetes Audit Log Source",
+  "category": "Falco",
+  "difficulty": "Hard",
+  "type": "task",
+  "weight": 7,
+  "description": "## Enable Kubernetes Audit Log Source\n\nFalco is capable of monitoring Kubernetes control plane events by acting as an audit log receiver. In this task, you will configure Falco's Helm installation to activate the audit log integration and specify a custom port for the webhook receiver.\n\n**Prerequisite:** Ensure the **Falco** add-on is installed from the Add-ons catalog (🧩) before starting this task.\n\n**Your task:**\n\nUpdate the configuration of the existing Helm release named `falco` in the `falco` namespace to:\n1. Enable the Kubernetes Audit Log input source (`auditLog.enabled` set to `true`).\n2. Configure the audit log webhook receiver service port (`auditLog.port`) to listen on port `8765`.\n\n```bash\n# Verify your Helm release user values:\nhelm get values falco -n falco\n```",
+  "hints": [
+    {
+      "title": "Upgrading Helm release",
+      "body": "Use `helm upgrade` with the `--reuse-values` flag to apply the new values to the existing installation:",
+      "command": "helm upgrade falco falcosecurity/falco --reuse-values --namespace falco --set auditLog.enabled=true --set auditLog.port=8765"
+    }
+  ],
+  "setup_commands": [],
+  "teardown_commands": [],
+  "default_namespace": "falco",
+  "validation": {
+    "commands": [
+      {
+        "description": "Helm release falco exists in namespace falco",
+        "command": "helm status falco -n falco >/dev/null && echo 'ok' || echo 'fail'",
+        "expected_output": "ok",
+        "match": "exact"
+      },
+      {
+        "description": "Audit log receiver is enabled and listening on port 8765",
+        "command": "python3 -c 'import json, subprocess; out = subprocess.check_output([\"helm\", \"get\", \"values\", \"falco\", \"-n\", \"falco\", \"-o\", \"json\"]); data = json.loads(out); audit = data.get(\"auditLog\", {}); print(\"ok\" if audit.get(\"enabled\") == True and int(audit.get(\"port\", 0)) == 8765 else \"fail\")'",
+        "expected_output": "ok",
+        "match": "exact"
+      }
+    ]
+  }
+}

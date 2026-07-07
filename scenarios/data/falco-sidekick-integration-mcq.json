@@ -1,0 +1,27 @@
+{
+  "id": "falco-sidekick-integration-mcq",
+  "title": "Falcosidekick Output Forwarding",
+  "category": "Falco",
+  "difficulty": "Medium",
+  "type": "mcq",
+  "weight": 3,
+  "description": "## Falcosidekick Output Forwarding\n\nFalcosidekick is a companion tool that extends Falco's alert delivery capabilities.\n\nHow does Falcosidekick receive alerts from the Falco daemon?\n\nChoose the correct option:",
+  "options": [
+    { "id": "a", "text": "By parsing the syslog daemon /var/log/syslog on the host system." },
+    { "id": "b", "text": "By listening on an HTTP endpoint where the Falco daemon posts alerts in JSON format." },
+    { "id": "c", "text": "By mounting the exact same SQLite database that Falco writes to." },
+    { "id": "d", "text": "By intercepting the standard output of the Falco daemon pods." }
+  ],
+  "correct_option": "b",
+  "explanation": "Falco is configured to output alerts over HTTP by enabling the `http` output option and pointing it to Falcosidekick's server endpoint (usually `http://falco-falcosidekick:2801/`). Falcosidekick listens on this port, parses the JSON payloads, and forwards them to Slack, Elasticsearch, or other outputs.",
+  "hints": [
+    {
+      "title": "Falcosidekick Architecture Docs",
+      "body": "Falcosidekick acts as a fan-out forwarder. Falco communicates with it via standard HTTP webhook POSTs.",
+      "command": "echo 'See: https://github.com/falcosecurity/falcosidekick'"
+    }
+  ],
+  "setup_commands": [],
+  "teardown_commands": [],
+  "default_namespace": "default"
+}

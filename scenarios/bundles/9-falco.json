@@ -1,0 +1,21 @@
+{
+  "id": "9-falco",
+  "name": "Falco",
+  "icon": "🦅",
+  "tagline": "CNCF runtime security tool for detecting threats and anomalies in containers and Kubernetes",
+  "color": "#ef4444",
+  "colorDim": "rgba(239,68,68,0.12)",
+  "exam_minutes": 60,
+  "scenario_ids": [
+    "falco-architecture-mcq",
+    "falco-rules-structure-mcq",
+    "falco-priorities-mcq",
+    "falco-sidekick-integration-mcq",
+    "falco-sensitive-file-read",
+    "falco-custom-rule-task",
+    "falco-override-priority-task",
+    "falco-http-output-task",
+    "falco-kubernetes-audit-task",
+    "falco-json-output-task"
+  ]
+}

@@ -1,0 +1,40 @@
+{
+  "id": "falco-custom-rule-task",
+  "title": "Write a Custom Falco Rule",
+  "category": "Falco",
+  "difficulty": "Medium",
+  "type": "task",
+  "weight": 6,
+  "description": "## Write a Custom Falco Rule\n\nFalco allows security administrators to write custom rules to detect domain-specific threats. In this task, you will create a new custom rule to monitor access to `/etc/shadow` files inside containers.\n\n**Your task:**\n\nCreate a Kubernetes ConfigMap named `falco-custom-rules` in the namespace `falco`. The ConfigMap must contain a key named `custom-rules.yaml` storing the rule definition in Falco's standard YAML list format. The rule must possess:\n- **`rule`**: `Read Sensitive File`\n- **`desc`**: `Detects attempts to read sensitive system file /etc/shadow`\n- **`condition`**: `evt.type = open and fd.name = \"/etc/shadow\"` (or matching logic targeting `/etc/shadow` open events)\n- **`output`**: `Sensitive file read (user=%user.name command=%proc.cmdline file=%fd.name)`\n- **`priority`**: `WARNING`\n\n```yaml\n# Expected structure inside custom-rules.yaml:\n- rule: Read Sensitive File\n  desc: ...\n  condition: ...\n  output: ...\n  priority: ...\n```",
+  "hints": [
+    {
+      "title": "Creating the ConfigMap",
+      "body": "Use a manifest file or standard heredoc to create the ConfigMap. Remember, Falco rules are always lists of rules/macros/lists in YAML.",
+      "command": "kubectl apply -f - <<'EOF'\napiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: falco-custom-rules\n  namespace: falco\ndata:\n  custom-rules.yaml: |\n    - rule: Read Sensitive File\n      desc: Detects attempts to read sensitive system file /etc/shadow\n      condition: evt.type = open and fd.name = \"/etc/shadow\"\n      output: Sensitive file read (user=%user.name command=%proc.cmdline file=%fd.name)\n      priority: WARNING\nEOF"
+    }
+  ],
+  "setup_commands": [
+    { "command": "kubectl create namespace falco 2>/dev/null || true" },
+    { "command": "kubectl delete configmap falco-custom-rules -n falco --ignore-not-found" }
+  ],
+  "teardown_commands": [
+    { "command": "kubectl delete configmap falco-custom-rules -n falco --ignore-not-found" }
+  ],
+  "default_namespace": "falco",
+  "validation": {
+    "commands": [
+      {
+        "description": "ConfigMap falco-custom-rules exists in namespace falco",
+        "command": "kubectl get configmap falco-custom-rules -n falco -o jsonpath='{.metadata.name}'",
+        "expected_output": "falco-custom-rules",
+        "match": "exact"
+      },
+      {
+        "description": "ConfigMap contains the custom rule with correct condition and priority",
+        "command": "python3 -c 'import yaml, subprocess; out = subprocess.check_output([\"kubectl\", \"get\", \"configmap\", \"falco-custom-rules\", \"-n\", \"falco\", \"-o\", \"jsonpath={.data.custom-rules\\\\.yaml}\"]); data = yaml.safe_load(out); rules = [x for x in data if isinstance(x, dict) and x.get(\"rule\") == \"Read Sensitive File\"]; print(\"ok\" if rules and \"/etc/shadow\" in rules[0].get(\"condition\", \"\") and rules[0].get(\"priority\") == \"WARNING\" else \"fail\")'",
+        "expected_output": "ok",
+        "match": "exact"
+      }
+    ]
+  }
+}

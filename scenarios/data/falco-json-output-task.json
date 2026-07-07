@@ -1,0 +1,35 @@
+{
+  "id": "falco-json-output-task",
+  "title": "Enable JSON Logging Format",
+  "category": "Falco",
+  "difficulty": "Easy",
+  "type": "task",
+  "weight": 4,
+  "description": "## Enable JSON Logging Format\n\nTo make threat alerts easier to ingest and parse by SIEM platforms, Falco supports emitting log events as raw JSON structures. In this task, you will configure Falco's Helm deployment to enable JSON output.\n\n**Prerequisite:** Ensure the **Falco** add-on is installed from the Add-ons catalog (🧩) before starting this task.\n\n**Your task:**\n\nUpdate the configuration of the existing Helm release named `falco` in the `falco` namespace to:\n1. Enable JSON logging format (`falco.json_output` set to `true`).\n\n```bash\n# Verify your Helm release user values:\nhelm get values falco -n falco\n```",
+  "hints": [
+    {
+      "title": "Upgrading Helm release",
+      "body": "Use `helm upgrade` with the `--reuse-values` flag to apply the new values to the existing installation:",
+      "command": "helm upgrade falco falcosecurity/falco --reuse-values --namespace falco --set falco.json_output=true"
+    }
+  ],
+  "setup_commands": [],
+  "teardown_commands": [],
+  "default_namespace": "falco",
+  "validation": {
+    "commands": [
+      {
+        "description": "Helm release falco exists in namespace falco",
+        "command": "helm status falco -n falco >/dev/null && echo 'ok' || echo 'fail'",
+        "expected_output": "ok",
+        "match": "exact"
+      },
+      {
+        "description": "JSON output is enabled in Falco's Helm values",
+        "command": "python3 -c 'import json, subprocess; out = subprocess.check_output([\"helm\", \"get\", \"values\", \"falco\", \"-n\", \"falco\", \"-o\", \"json\"]); data = json.loads(out); falco_cfg = data.get(\"falco\", {}); print(\"ok\" if falco_cfg.get(\"json_output\") == True else \"fail\")'",
+        "expected_output": "ok",
+        "match": "exact"
+      }
+    ]
+  }
+}

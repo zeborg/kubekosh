@@ -1,0 +1,35 @@
+{
+  "id": "falco-http-output-task",
+  "title": "Configure Falco HTTP Output",
+  "category": "Falco",
+  "difficulty": "Medium",
+  "type": "task",
+  "weight": 6,
+  "description": "## Configure Falco HTTP Output\n\nBy default, Falco prints alerts to stdout. To forward threats to external systems, Falco supports sending JSON alerts via HTTP POST. In this task, you will configure Falco's Helm deployment to enable and route alerts to a webhook target.\n\n**Prerequisite:** Ensure the **Falco** add-on is installed from the Add-ons catalog (🧩) before starting this task.\n\n**Your task:**\n\nUpdate the configuration of the existing Helm release named `falco` in the `falco` namespace to:\n1. Enable the HTTP output mechanism (`falco.http_output.enabled` set to `true`).\n2. Set the HTTP target URL (`falco.http_output.url`) to `http://alert-receiver.falco.svc.cluster.local:8080/alerts`.\n\n```bash\n# Verify your Helm release user values:\nhelm get values falco -n falco\n```",
+  "hints": [
+    {
+      "title": "Upgrading Helm release",
+      "body": "Use `helm upgrade` with the `--reuse-values` flag to apply the new values to the existing installation:",
+      "command": "helm upgrade falco falcosecurity/falco --reuse-values --namespace falco --set falco.http_output.enabled=true --set falco.http_output.url=http://alert-receiver.falco.svc.cluster.local:8080/alerts"
+    }
+  ],
+  "setup_commands": [],
+  "teardown_commands": [],
+  "default_namespace": "falco",
+  "validation": {
+    "commands": [
+      {
+        "description": "Helm release falco exists in namespace falco",
+        "command": "helm status falco -n falco >/dev/null && echo 'ok' || echo 'fail'",
+        "expected_output": "ok",
+        "match": "exact"
+      },
+      {
+        "description": "HTTP output is enabled and target URL is set correctly in Helm values",
+        "command": "python3 -c 'import json, subprocess; out = subprocess.check_output([\"helm\", \"get\", \"values\", \"falco\", \"-n\", \"falco\", \"-o\", \"json\"]); data = json.loads(out); falco_cfg = data.get(\"falco\", {}); http_cfg = falco_cfg.get(\"http_output\", {}); print(\"ok\" if http_cfg.get(\"enabled\") == True and http_cfg.get(\"url\") == \"http://alert-receiver.falco.svc.cluster.local:8080/alerts\" else \"fail\")'",
+        "expected_output": "ok",
+        "match": "exact"
+      }
+    ]
+  }
+}
