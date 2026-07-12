@@ -1,12 +1,13 @@
 'use strict';
 
 const express   = require('express');
-const fs        = require('fs');
 const path      = require('path');
 const { exec }  = require('child_process');
 const { promisify } = require('util');
 const execAsync = promisify(exec);
-const Database  = require('better-sqlite3');
+
+const { getDb }                    = require('./db/index');
+const { loadProgress, saveProgress } = require('./db/progress');
 
 const { readState, writeState, reconcileInterrupted } = require('./lib/addon-state');
 const { createJobEngine }  = require('./lib/addon-jobs');
@@ -47,133 +48,12 @@ app.use((req, res, next) => {
 });
 app.use(express.static(path.join(__dirname, '../frontend/dist')));
 
-const DB_FILE = process.env.PROGRESS_DB || '/data/progress.db';
-
 // ── Addons system paths (env-overridable for testability) ─────────────────────
-// ADDONS_DIR        — addon manifests (addons/<id>/addon.json), shipped in-repo
 // ADDONS_STATE_FILE — runtime install state, persisted on the /data mount
 // ADDONS_BIN_DIR    — install target for target:"os" binaries; on /data so it
 //                     survives container restarts and is added to the shell PATH
-const ADDONS_DIR       = process.env.ADDONS_DIR       || path.join(__dirname, '../addons');
 const ADDONS_STATE_FILE = process.env.ADDONS_STATE_FILE || '/data/addons-state.json';
-const ADDONS_BIN_DIR   = process.env.ADDONS_BIN_DIR   || '/data/addons/bin';
-
-// ── SQLite progress store ─────────────────────────────────────────────────────
-
-let _db = null;
-function getDb() {
-  if (_db) return _db;
-  const dir = path.dirname(DB_FILE);
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-  _db = new Database(DB_FILE);
-  _db.exec(`
-    CREATE TABLE IF NOT EXISTS progress (
-      scenario_id   TEXT PRIMARY KEY,
-      status        TEXT,
-      attempts      INTEGER DEFAULT 0,
-      last_validated TEXT,
-      completed_at  TEXT
-    )
-  `);
-
-  // Run dynamic schema migrations to add missing columns to the progress table
-  try {
-    const tableInfo = _db.prepare("PRAGMA table_info(progress)").all();
-    const existingColumns = tableInfo.map(col => col.name);
-    const requiredColumns = [
-      { name: 'started_at',         type: 'TEXT' },
-      { name: 'notes',              type: 'TEXT' },
-      { name: 'time_spent_seconds', type: 'INTEGER' },
-    ];
-    for (const col of requiredColumns) {
-      if (!existingColumns.includes(col.name)) {
-        console.log(`Migrating progress database schema: Adding column '${col.name}' (${col.type})`);
-        _db.exec(`ALTER TABLE progress ADD COLUMN ${col.name} ${col.type}`);
-      }
-    }
-  } catch (e) {
-    console.error('Failed to run schema migrations on progress table:', e.message);
-  }
-
-  _db.exec(`
-    CREATE TABLE IF NOT EXISTS sessions (
-      id            TEXT PRIMARY KEY,
-      bundle_id     TEXT NOT NULL,
-      started_at    TEXT NOT NULL,
-      submitted_at  TEXT,
-      status        TEXT NOT NULL DEFAULT 'active',
-      exam_minutes  INTEGER NOT NULL DEFAULT 120,
-      duration_secs INTEGER,
-      snapshot      TEXT,
-      scenario_ids  TEXT
-    )
-  `);
-
-  // Migrate: add scenario_ids column if missing
-  try {
-    const cols = _db.prepare("PRAGMA table_info(sessions)").all().map(c => c.name);
-    if (!cols.includes('scenario_ids')) {
-      _db.exec(`ALTER TABLE sessions ADD COLUMN scenario_ids TEXT`);
-    }
-  } catch (e) {
-    console.error('Failed to migrate sessions table:', e.message);
-  }
-
-  // Separate exam-session progress table — tracks completions per session
-  _db.exec(`
-    CREATE TABLE IF NOT EXISTS exam_progress (
-      session_id    TEXT NOT NULL,
-      scenario_id   TEXT NOT NULL,
-      status        TEXT NOT NULL DEFAULT 'in_progress',
-      attempts      INTEGER NOT NULL DEFAULT 0,
-      completed_at  TEXT,
-      PRIMARY KEY (session_id, scenario_id),
-      FOREIGN KEY (session_id) REFERENCES sessions(id)
-    )
-  `);
-  return _db;
-}
-
-function loadProgress() {
-  try {
-    const rows = getDb().prepare('SELECT * FROM progress').all();
-    return Object.fromEntries(rows.map(r => [r.scenario_id, {
-      status:             r.status,
-      attempts:           r.attempts,
-      last_validated:     r.last_validated,
-      completed_at:       r.completed_at,
-      started_at:         r.started_at || null,
-      notes:              r.notes || null,
-      time_spent_seconds: r.time_spent_seconds || 0,
-    }]));
-  } catch { return {}; }
-}
-
-function saveProgress(progress) {
-  try {
-    const db    = getDb();
-    const upsert = db.prepare(`
-      INSERT INTO progress (scenario_id, status, attempts, last_validated, completed_at, started_at, notes, time_spent_seconds)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(scenario_id) DO UPDATE SET
-        status             = excluded.status,
-        attempts           = excluded.attempts,
-        last_validated     = excluded.last_validated,
-        completed_at       = excluded.completed_at,
-        started_at         = excluded.started_at,
-        notes              = excluded.notes,
-        time_spent_seconds = excluded.time_spent_seconds
-    `);
-    db.transaction((entries) => {
-      for (const [id, p] of entries) {
-        upsert.run(id, p.status || null, p.attempts || 0, p.last_validated || null,
-          p.completed_at || null, p.started_at || null, p.notes || null, p.time_spent_seconds || 0);
-      }
-    })(Object.entries(progress));
-  } catch (e) {
-    console.error('Failed to save progress:', e.message);
-  }
-}
+const ADDONS_BIN_DIR    = process.env.ADDONS_BIN_DIR    || '/data/addons/bin';
 
 // ── Shared utilities ──────────────────────────────────────────────────────────
 
