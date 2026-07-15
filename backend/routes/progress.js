@@ -39,7 +39,9 @@ function createProgressRouter({ getDb, loadProgress, saveProgress }) {
       SET status = 'not_started',
           attempts = 0,
           completed_at = NULL,
-          last_validated = NULL
+          last_validated = NULL,
+          started_at = NULL,
+          time_spent_seconds = 0
       WHERE scenario_id = ?
     `);
 
@@ -70,7 +72,9 @@ function createProgressRouter({ getDb, loadProgress, saveProgress }) {
         SET status = 'not_started',
             attempts = 0,
             completed_at = NULL,
-            last_validated = NULL
+            last_validated = NULL,
+            started_at = NULL,
+            time_spent_seconds = 0
         WHERE scenario_id = ?
       `).run(req.params.id);
       res.json({ ok: true });

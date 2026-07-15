@@ -4,6 +4,7 @@ const express = require('express');
 const path    = require('path');
 
 const { loadProgress, saveProgress } = require('./db/progress');
+const { getDb } = require('./db/index');
 
 const { readState, writeState, reconcileInterrupted } = require('./lib/addon-state');
 const { createJobEngine }        = require('./lib/addon-jobs');
@@ -72,7 +73,7 @@ try {
 
 // ── Mount routes ──────────────────────────────────────────────────────────────
 
-const progressDeps = { loadProgress, saveProgress };
+const progressDeps = { getDb, loadProgress, saveProgress };
 
 app.use('/api/tracks',    createTracksRouter(progressDeps));
 app.use('/api/bundles',   createBundlesRouter(progressDeps));
