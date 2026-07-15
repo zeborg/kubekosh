@@ -59,8 +59,13 @@ export default function App() {
     startExam,
     submitExam,
     abandonExam,
+    syncExamProgress,
   } = useExamSession({ bundles, refreshProgress, examSession, setExamSession })
 
+  const handleProgressUpdate = useCallback(async () => {
+    await refreshProgress()
+    if (examSession) await syncExamProgress(examSession)
+  }, [refreshProgress, syncExamProgress, examSession])
 
   // ── Addon status polling (drives dashboard buttons in Header) ─────────────
   useEffect(() => {
@@ -147,7 +152,7 @@ export default function App() {
           setActiveId(null)
           setScenario(null)
         }}
-        onProgressUpdate={refreshProgress}
+        onProgressUpdate={handleProgressUpdate}
         onStartExam={setExamModalBundle}
         collapsed={bundlesCollapsed}
         onToggleCollapse={() => setBundlesCollapsed(c => !c)}
@@ -173,7 +178,7 @@ export default function App() {
           onToggleCollapse={() => setSidebarCollapsed(c => !c)}
           width={currentSidebarW}
           activeBundleId={activeBundleId}
-          onProgressUpdate={refreshProgress}
+          onProgressUpdate={handleProgressUpdate}
           isExamMode={!!examSession}
           examProgress={examProgress}
           totalExamWeight={totalExamWeight}
@@ -185,7 +190,7 @@ export default function App() {
           <div className={styles.scenarioWrap}>
             <ScenarioPanel
               scenario={scenario}
-              onProgressUpdate={refreshProgress}
+              onProgressUpdate={handleProgressUpdate}
               onScenarioStart={handleScenarioStart}
               isExamMode={!!examSession}
               examProgress={examProgress}
