@@ -23,6 +23,13 @@ export default function App() {
 
   // examSession is lifted here so both useProgress and useExamSession can share it
   const [examSession, setExamSession] = useState(null)
+  // IDs of scenarios submitted this exam session (regardless of pass/fail)
+  // Lifted here so Sidebar and ScenarioPanel share the same truth
+  const [examSubmittedIds, setExamSubmittedIds] = useState(() => new Set())
+
+  const handleExamSubmit = useCallback((scenarioId) => {
+    setExamSubmittedIds(prev => new Set([...prev, scenarioId]))
+  }, [])
 
   // ── Cross-cutting hooks ───────────────────────────────────────────────────
   const { addons, refresh: refreshAddons } = useAddons()
@@ -66,6 +73,24 @@ export default function App() {
     await refreshProgress()
     if (examSession) await syncExamProgress(examSession)
   }, [refreshProgress, syncExamProgress, examSession])
+
+  // Clear submitted IDs when exam session ends
+  useEffect(() => {
+    if (!examSession) setExamSubmittedIds(new Set())
+  }, [examSession])
+
+  // Seed submitted IDs from examProgress on session restore
+  // (scenarios with attempts > 0 were already submitted in a prior session load)
+  useEffect(() => {
+    if (!examProgress || !examSession) return
+    setExamSubmittedIds(prev => {
+      const next = new Set(prev)
+      Object.entries(examProgress).forEach(([id, ep]) => {
+        if ((ep?.attempts || 0) > 0) next.add(id)
+      })
+      return next
+    })
+  }, [examProgress, examSession])
 
   // ── Addon status polling (drives dashboard buttons in Header) ─────────────
   useEffect(() => {
@@ -140,6 +165,7 @@ export default function App() {
           }
         }}
         onCacheReloaded={refreshProgress}
+        isExamMode={!!examSession}
       />
 
       <BundleNav
@@ -163,6 +189,7 @@ export default function App() {
         <ExamTimer
           session={examSession}
           bundle={activeBundle}
+          submittedCount={examSubmittedIds.size}
           onSubmit={submitExam}
           onAbandon={abandonExam}
         />
@@ -181,6 +208,7 @@ export default function App() {
           onProgressUpdate={handleProgressUpdate}
           isExamMode={!!examSession}
           examProgress={examProgress}
+          examSubmittedIds={examSubmittedIds}
           totalExamWeight={totalExamWeight}
         />
 
@@ -194,6 +222,8 @@ export default function App() {
               onScenarioStart={handleScenarioStart}
               isExamMode={!!examSession}
               examProgress={examProgress}
+              examSubmittedIds={examSubmittedIds}
+              onExamSubmit={handleExamSubmit}
               totalExamWeight={totalExamWeight}
               focusMode={focusMode}
               onToggleFocus={toggleFocusMode}

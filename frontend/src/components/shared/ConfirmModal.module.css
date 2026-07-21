@@ -83,5 +83,10 @@
   color: #fff;
 }
 
+.confirmBtn.primary {
+  background: var(--blue);
+  color: #fff;
+}
+
 @keyframes fadeIn  { from { opacity: 0 } to { opacity: 1 } }
 @keyframes slideUp { from { opacity: 0; transform: translateY(12px) } to { opacity: 1; transform: none } }

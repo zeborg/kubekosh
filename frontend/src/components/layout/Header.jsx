@@ -72,7 +72,7 @@ function ReloadModal({ state, data, error, onClose, onReload }) {
 }
 
 // ── Header ────────────────────────────────────────────────────────────────────
-export default function Header({ clusterReady, onShowHistory, onShowAddons, addons = [], tracks = [], activeTrackId, onTrackSelect, onCacheReloaded }) {
+export default function Header({ clusterReady, onShowHistory, onShowAddons, addons = [], tracks = [], activeTrackId, onTrackSelect, onCacheReloaded, isExamMode = false }) {
   const [theme, setTheme] = useState(
     () => localStorage.getItem('kubekosh-theme') || 'dark'
   )
@@ -136,6 +136,7 @@ export default function Header({ clusterReady, onShowHistory, onShowAddons, addo
               tracks={tracks}
               activeTrackId={activeTrackId}
               onSelect={onTrackSelect}
+              disabled={isExamMode}
             />
           )}
           {tracks.length > 0 && activeTrackId && (
@@ -236,20 +237,22 @@ export default function Header({ clusterReady, onShowHistory, onShowAddons, addo
             </div>
           ))}
 
-          {/* Reload cache */}
-          <div className={styles.reloadBtnContainer}>
-            <button
-              className={`${styles.reloadBtn} ${reloadModal?.state === 'loading' ? styles.reloadBtnSpinning : ''}`}
-              onClick={handleReloadCache}
-              disabled={reloadModal?.state === 'loading'}
-              aria-label="Reload scenario cache"
-            >
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M23 4v6h-6" />
-                <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
-              </svg>
-            </button>
-          </div>
+          {/* Reload cache — disabled during exam */}
+          {!isExamMode && (
+            <div className={styles.reloadBtnContainer}>
+              <button
+                className={`${styles.reloadBtn} ${reloadModal?.state === 'loading' ? styles.reloadBtnSpinning : ''}`}
+                onClick={handleReloadCache}
+                disabled={reloadModal?.state === 'loading'}
+                aria-label="Reload scenario cache"
+              >
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M23 4v6h-6" />
+                  <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+                </svg>
+              </button>
+            </div>
+          )}
         </div>
       </header>
 

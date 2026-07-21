@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import styles from './TrackDropdown.module.css'
 
-export default function TrackDropdown({ tracks, activeTrackId, onSelect }) {
+export default function TrackDropdown({ tracks, activeTrackId, onSelect, disabled = false }) {
   const [open, setOpen] = useState(false)
   const ref = useRef(null)
 
@@ -32,12 +32,12 @@ export default function TrackDropdown({ tracks, activeTrackId, onSelect }) {
   return (
     <div className={styles.wrap} ref={ref}>
       <button
-        className={`${styles.trigger} ${open ? styles.triggerOpen : ''}`}
-        onClick={() => setOpen(o => !o)}
+        className={`${styles.trigger} ${open ? styles.triggerOpen : ''} ${disabled ? styles.triggerDisabled : ''}`}
+        onClick={() => !disabled && setOpen(o => !o)}
         aria-haspopup="listbox"
         aria-expanded={open}
         id="track-selector-btn"
-        title="Switch learning track"
+        title={disabled ? 'Track switching is disabled during an active exam' : 'Switch learning track'}
         style={{
           '--tcolor': activeTrack?.color || 'var(--text-2)',
           '--tdim': activeTrack?.colorDim || 'var(--surface2)'

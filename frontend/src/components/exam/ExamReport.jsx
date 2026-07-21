@@ -24,9 +24,9 @@ export default function ExamReport({ report, bundle, onClose, onRetry }) {
   if (!report) return null
 
   const { snapshot, durationSecs } = report
-  const completed = snapshot.filter(s => s.status === 'completed')
-  const totalWeight = snapshot.reduce((a, s) => a + (s.weight || 0), 0)
-  const earnedWeight = completed.reduce((a, s) => a + (s.weight || 0), 0)
+  const correct      = snapshot.filter(s => s.status === 'completed')
+  const totalWeight  = snapshot.reduce((a, s) => a + (s.weight || 0), 0)
+  const earnedWeight = correct.reduce((a, s) => a + (s.weight || 0), 0)
   const pct = totalWeight > 0 ? Math.round((earnedWeight / totalWeight) * 100) : 0
 
   // Group by category
@@ -72,7 +72,7 @@ export default function ExamReport({ report, bundle, onClose, onRetry }) {
               {passed ? '✅ Passed' : '❌ Not Yet Passing'}
             </div>
             <div className={styles.heroStats}>
-              <span>{completed.length}/{snapshot.length} scenarios</span>
+              <span>{correct.length}/{snapshot.length} correct</span>
               <span>·</span>
               <span>{earnedWeight}/{totalWeight} points</span>
               <span>·</span>
@@ -87,25 +87,30 @@ export default function ExamReport({ report, bundle, onClose, onRetry }) {
           {Object.entries(byCategory).map(([cat, items]) => (
             <div key={cat} className={styles.catGroup}>
               <div className={styles.catTitle}>{cat}</div>
-              {items.map(s => (
-                <div key={s.id} className={`${styles.row} ${s.status === 'completed' ? styles.rowDone : ''}`}>
-                  <span className={styles.rowIcon}>{s.status === 'completed' ? '✅' : '⬜'}</span>
-                  <span className={styles.rowTitle}>{s.title}</span>
-                  <span className={styles.rowDiff} style={{ color: DIFF_COLOR[s.difficulty] }}>
-                    {s.difficulty}
-                  </span>
-                  <span className={styles.rowTime}>
-                    {s.time_spent_seconds > 0 && (
-                      <svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: 3, verticalAlign: 'middle', opacity: 0.6 }}>
-                        <circle cx="12" cy="12" r="10" />
-                        <polyline points="12 6 12 12 16 14" />
-                      </svg>
-                    )}
-                    {formatRowTime(s.time_spent_seconds)}
-                  </span>
-                  <span className={styles.rowPts}>{s.status === 'completed' ? s.weight : 0}/{s.weight} pts</span>
-                </div>
-              ))}
+              {items.map(s => {
+                const isCorrect    = s.status === 'completed'
+                const isSubmitted  = (s.attempts || 0) > 0
+                const rowIcon      = isCorrect ? '✅' : isSubmitted ? '❌' : '⬜'
+                return (
+                  <div key={s.id} className={`${styles.row} ${isCorrect ? styles.rowDone : isSubmitted ? styles.rowWrong : ''}`}>
+                    <span className={styles.rowIcon}>{rowIcon}</span>
+                    <span className={styles.rowTitle}>{s.title}</span>
+                    <span className={styles.rowDiff} style={{ color: DIFF_COLOR[s.difficulty] }}>
+                      {s.difficulty}
+                    </span>
+                    <span className={styles.rowTime}>
+                      {s.time_spent_seconds > 0 && (
+                        <svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: 3, verticalAlign: 'middle', opacity: 0.6 }}>
+                          <circle cx="12" cy="12" r="10" />
+                          <polyline points="12 6 12 12 16 14" />
+                        </svg>
+                      )}
+                      {formatRowTime(s.time_spent_seconds)}
+                    </span>
+                    <span className={styles.rowPts}>{isCorrect ? s.weight : 0}/{s.weight} pts</span>
+                  </div>
+                )
+              })}
             </div>
           ))}
         </div>

@@ -48,6 +48,7 @@ export function useConfirm() {
       confirmLabel={state.confirmLabel}
       cancelLabel={state.cancelLabel}
       danger={state.danger}
+      primary={state.primary}
       onConfirm={handleConfirm}
       onCancel={handleCancel}
     />

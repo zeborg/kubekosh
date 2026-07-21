@@ -11,7 +11,7 @@ function formatTime(secs) {
   return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`
 }
 
-export default function ExamTimer({ session, bundle, onSubmit, onAbandon }) {
+export default function ExamTimer({ session, bundle, submittedCount, onSubmit, onAbandon }) {
   const [elapsed, setElapsed] = useState(0)
   const autoSubmitted = useRef(false)
   // session.exam_minutes is set at start time with the user's custom value
@@ -47,7 +47,7 @@ export default function ExamTimer({ session, bundle, onSubmit, onAbandon }) {
   const handleSubmit = useCallback(async () => {
     const ok = await confirm({
       title: 'Submit Exam',
-      message: `Submit exam now?\n\n${session.completedCount || 0} of ${session.scenarioCount || '?'} scenarios completed.`,
+      message: `Submit exam now?\n\n${submittedCount ?? session.completedCount ?? 0} of ${session.scenarioCount || '?'} scenarios submitted.`,
       confirmLabel: 'Submit',
     })
     if (!ok) return
@@ -89,7 +89,7 @@ export default function ExamTimer({ session, bundle, onSubmit, onAbandon }) {
           <div className={styles.fill} style={{ width: `${pct}%` }} />
         </div>
         <div className={styles.progress}>
-          {session.completedCount || 0} / {session.scenarioCount || '?'} completed
+          {submittedCount ?? session.completedCount ?? 0} / {session.scenarioCount || '?'} submitted
         </div>
       </div>
 

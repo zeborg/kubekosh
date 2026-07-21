@@ -17,7 +17,7 @@ export default function Sidebar({
   scenarios, activeId, onSelect, loading,
   collapsed, onToggleCollapse, width,
   activeBundleId, onProgressUpdate,
-  isExamMode, examProgress, totalExamWeight,
+  isExamMode, examProgress, examSubmittedIds, totalExamWeight,
 }) {
   const [filterDiff, setFilterDiff] = useState('All')
   const [filterType, setFilterType] = useState('All')
@@ -162,9 +162,9 @@ export default function Sidebar({
             /* ── Exam mode: flat numbered list ─────────────────── */
             <div className={styles.flatList}>
               {scenarios.map((s, idx) => {
-                const examDone = examProgress?.[s.id]?.status === 'completed'
+                const examDone      = examProgress?.[s.id]?.status === 'completed'
+                const examSubmitted = examDone || examSubmittedIds?.has(s.id)
                 const active = s.id === activeId
-                const hasAttempts = (examProgress?.[s.id]?.attempts || 0) > 0
                 return (
                   <button
                     key={s.id}
@@ -183,8 +183,8 @@ export default function Sidebar({
                           {Math.round((s.weight / totalExamWeight) * 100)}% wt
                         </span>
                       )}
-                      {examDone && (
-                        <span className={styles.examCompletedTag}>✓ Completed</span>
+                      {examSubmitted && (
+                        <span className={styles.examSubmittedTag}>✓ Submitted</span>
                       )}
                     </div>
                   </button>

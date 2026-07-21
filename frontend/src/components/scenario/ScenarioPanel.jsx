@@ -25,7 +25,7 @@ async function resetProgress(scope, opts) {
   })
 }
 
-export default function ScenarioPanel({ scenario, onProgressUpdate, onScenarioStart, isExamMode, examProgress, totalExamWeight, focusMode, onToggleFocus }) {
+export default function ScenarioPanel({ scenario, onProgressUpdate, onScenarioStart, isExamMode, examProgress, examSubmittedIds, onExamSubmit, totalExamWeight, focusMode, onToggleFocus }) {
   const [tab, setTab] = useState('problem')
   const [setupState, setSetupState] = useState('idle') // idle | running | done | error
   const [validating, setValidating] = useState(false)
@@ -128,12 +128,23 @@ export default function ScenarioPanel({ scenario, onProgressUpdate, onScenarioSt
   }
 
   async function validate() {
+    // In exam mode, show a confirmation modal before submitting
+    if (isExamMode) {
+      const ok = await confirm({
+        title: 'Submit Scenario',
+        message: `Submit "${scenario.title}" for this exam?\n\nOnce submitted, you cannot resubmit or reset this scenario for the ongoing exam session. Results will be revealed in the exam report.`,
+        confirmLabel: 'Submit',
+        primary: true,
+      })
+      if (!ok) return
+    }
     setValidating(true)
     setValidResult(null)
     try {
       const r = await fetch(`/api/scenarios/${scenario.id}/validate`, { method: 'POST' })
       const d = await r.json()
       setValidResult(d)
+      if (isExamMode) onExamSubmit?.(scenario.id)
       onProgressUpdate()
     } catch {
       setValidResult({ error: true })
@@ -143,6 +154,16 @@ export default function ScenarioPanel({ scenario, onProgressUpdate, onScenarioSt
 
   async function submitMCQ() {
     if (!selectedOption) return
+    // In exam mode, show a confirmation modal before submitting
+    if (isExamMode) {
+      const ok = await confirm({
+        title: 'Submit Answer',
+        message: `Submit your answer for "${scenario.title}"?\n\nOnce submitted, you cannot resubmit or change your answer for the ongoing exam session. Results will be revealed in the exam report.`,
+        confirmLabel: 'Submit',
+        primary: true,
+      })
+      if (!ok) return
+    }
     setSubmitting(true)
     try {
       const r = await fetch(`/api/scenarios/${scenario.id}/answer`, {
@@ -152,6 +173,7 @@ export default function ScenarioPanel({ scenario, onProgressUpdate, onScenarioSt
       })
       const d = await r.json()
       setMcqResult(d)
+      if (isExamMode) onExamSubmit?.(scenario.id)
       onProgressUpdate()
     } catch {}
     setSubmitting(false)
@@ -194,8 +216,10 @@ export default function ScenarioPanel({ scenario, onProgressUpdate, onScenarioSt
   }
 
   const isCompleted = scenario.progress?.status === 'completed'
-  // In exam mode, use exam-specific completion status for the banner
+  // In exam mode, use exam-specific completion status
   const isExamCompleted = isExamMode && examProgress?.[scenario.id]?.status === 'completed'
+  // A scenario is "submitted" if the App-level Set says so (covers pass AND fail)
+  const isExamSubmitted = isExamMode && !!(examSubmittedIds?.has(scenario.id) || isExamCompleted)
 
   return (
     <div className={styles.panel}>
@@ -325,26 +349,73 @@ export default function ScenarioPanel({ scenario, onProgressUpdate, onScenarioSt
             <span>✓</span> Scenario completed
           </div>
         )}
-        {isExamCompleted && (
-          <div className={styles.completedBanner}>
-            <span>✓</span> Completed in this exam
+        {isExamSubmitted && (
+          <div className={styles.submittedBanner}>
+            <span>✓</span> Submitted — results visible in exam report
           </div>
         )}
       </div>
 
       {/* Tabs */}
       <div className={styles.tabs}>
-        {['problem', ...(isExamMode ? [] : ['hints']), ...(scenario.type === 'task' ? ['validate'] : [])].map(t => (
+        <div className={styles.tabsList}>
+          {/* Problem tab */}
           <button
-            key={t}
-            className={`${styles.tab} ${tab === t ? styles.activeTab : ''}`}
-            onClick={() => setTab(t)}
+            className={`${styles.tab} ${tab === 'problem' ? styles.activeTab : ''}`}
+            onClick={() => setTab('problem')}
           >
-            {t === 'problem' ? '📄 Problem'
-              : t === 'hints' ? `💡 Hints (${scenario.hints?.length || 0})`
-              : '✓ Validate'}
+            📄 Problem
           </button>
-        ))}
+
+          {/* Exam mode task submit — placed directly after Problem tab */}
+          {isExamMode && scenario.type === 'task' && (
+            <button
+              className={isExamSubmitted ? styles.tabBarSubmittedBtn : styles.tabBarSubmitBtn}
+              onClick={validate}
+              disabled={validating || isExamSubmitted}
+              title={isExamSubmitted ? 'Already submitted for this exam' : 'Submit this scenario'}
+            >
+              {validating ? (
+                <><span className={styles.spinner} /> Submitting…</>
+              ) : isExamSubmitted ? (
+                <>
+                  <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="20 6 9 17 4 12" />
+                  </svg>
+                  Submitted
+                </>
+              ) : (
+                <>
+                  <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="22" y1="2" x2="11" y2="13" />
+                    <polygon points="22 2 15 22 11 13 2 9 22 2" />
+                  </svg>
+                  Submit
+                </>
+              )}
+            </button>
+          )}
+
+          {/* Practice mode: hints and validate tabs */}
+          {!isExamMode && (
+            <>
+              <button
+                className={`${styles.tab} ${tab === 'hints' ? styles.activeTab : ''}`}
+                onClick={() => setTab('hints')}
+              >
+                💡 Hints ({scenario.hints?.length || 0})
+              </button>
+              {scenario.type === 'task' && (
+                <button
+                  className={`${styles.tab} ${tab === 'validate' ? styles.activeTab : ''}`}
+                  onClick={() => setTab('validate')}
+                >
+                  ✓ Validate
+                </button>
+              )}
+            </>
+          )}
+        </div>
       </div>
 
       {/* Tab content */}
@@ -396,8 +467,9 @@ export default function ScenarioPanel({ scenario, onProgressUpdate, onScenarioSt
                 <div className={styles.options}>
                   {scenario.options?.map(opt => {
                     const isSelected = selectedOption === opt.id
-                    const showCorrect = mcqResult && opt.id === mcqResult.correct_option
-                    const showWrong = mcqResult && isSelected && !mcqResult.correct
+                    // In exam mode, never reveal which answer was correct/wrong while exam is active
+                    const showCorrect = mcqResult && opt.id === mcqResult.correct_option && !isExamMode
+                    const showWrong = mcqResult && isSelected && !mcqResult.correct && !isExamMode
                     return (
                       <button
                         key={opt.id}
@@ -406,8 +478,8 @@ export default function ScenarioPanel({ scenario, onProgressUpdate, onScenarioSt
                           ${showCorrect ? styles.optionCorrect : ''}
                           ${showWrong ? styles.optionWrong : ''}
                         `}
-                        onClick={() => !mcqResult && setSelectedOption(opt.id)}
-                        disabled={!!mcqResult}
+                        onClick={() => !mcqResult && !isExamSubmitted && setSelectedOption(opt.id)}
+                        disabled={!!mcqResult || isExamSubmitted}
                       >
                         <span className={styles.optionLetter}>{opt.id.toUpperCase()}</span>
                         <span className={styles.optionText}>
@@ -420,15 +492,19 @@ export default function ScenarioPanel({ scenario, onProgressUpdate, onScenarioSt
                   })}
                 </div>
 
-                {!mcqResult ? (
+                {isExamSubmitted ? (
+                  <div className={styles.examSubmittedInfo}>
+                    ✓ Answer submitted — results will be visible in the exam report
+                  </div>
+                ) : !mcqResult ? (
                   <button
                     className={styles.submitBtn}
                     onClick={submitMCQ}
                     disabled={!selectedOption || submitting}
                   >
-                    {submitting ? 'Checking…' : 'Submit Answer'}
+                    {submitting ? 'Submitting…' : isExamMode ? 'Submit Answer' : 'Submit Answer'}
                   </button>
-                ) : (
+                ) : !isExamMode ? (
                   <div className={`${styles.mcqResult} ${mcqResult.correct ? styles.mcqCorrect : styles.mcqWrong}`}>
                     <div className={styles.mcqResultTitle}>
                       {mcqResult.correct ? '✓ Correct!' : '✗ Incorrect — see the highlighted answer above'}
@@ -439,7 +515,7 @@ export default function ScenarioPanel({ scenario, onProgressUpdate, onScenarioSt
                       </div>
                     )}
                   </div>
-                )}
+                ) : null}
               </div>
             )}
           </div>
@@ -486,8 +562,8 @@ export default function ScenarioPanel({ scenario, onProgressUpdate, onScenarioSt
           </div>
         )}
 
-        {/* VALIDATE TAB */}
-        {tab === 'validate' && scenario.type === 'task' && (
+        {/* VALIDATE TAB — practice mode only */}
+        {tab === 'validate' && scenario.type === 'task' && !isExamMode && (
           <div className={styles.tabPane} style={{ animation: 'fadeIn 0.2s ease' }}>
             <div className={styles.validateHeader}>
               <div className={styles.validateDesc}>

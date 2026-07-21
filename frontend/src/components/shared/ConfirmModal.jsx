@@ -19,6 +19,7 @@ export default function ConfirmModal({
   open, title, message,
   confirmLabel = 'Confirm', cancelLabel = 'Cancel',
   danger = false,
+  primary = false,
   onConfirm, onCancel,
 }) {
   const confirmRef = useRef(null)
@@ -48,7 +49,7 @@ export default function ConfirmModal({
           <button className={styles.cancelBtn} onClick={onCancel}>{cancelLabel}</button>
           <button
             ref={confirmRef}
-            className={`${styles.confirmBtn} ${danger ? styles.danger : ''}`}
+            className={`${styles.confirmBtn} ${danger ? styles.danger : ''} ${primary && !danger ? styles.primary : ''}`}
             onClick={onConfirm}
           >
             {confirmLabel}

@@ -244,6 +244,7 @@
 
 .item.done .itemTitle { color: var(--text-2); }
 
+
 .itemTop {
   display: flex;
   align-items: flex-start;
@@ -375,6 +376,20 @@
   background: var(--green-dim);
   color: var(--green);
   border: 1px solid color-mix(in srgb, var(--green) 30%, transparent);
+  letter-spacing: 0.3px;
+  margin-left: auto;
+}
+
+/* Blue-toned submitted tag for exam mode (result hidden until exam ends) */
+.examSubmittedTag {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: var(--blue-dim);
+  color: var(--blue);
+  border: 1px solid color-mix(in srgb, var(--blue) 30%, transparent);
   letter-spacing: 0.3px;
   margin-left: auto;
 }

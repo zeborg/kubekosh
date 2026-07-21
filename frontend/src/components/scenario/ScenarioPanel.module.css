@@ -170,13 +170,48 @@
   gap: 6px;
 }
 
+/* Blue-toned banner shown in exam mode after submission */
+.submittedBanner {
+  margin-top: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--blue);
+  background: var(--blue-dim);
+  border: 1px solid color-mix(in srgb, var(--blue) 30%, transparent);
+  padding: 4px 10px;
+  border-radius: 5px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Neutral info block shown in place of validation results during exam */
+.examSubmittedInfo {
+  margin-top: 16px;
+  padding: 12px 16px;
+  border-radius: var(--radius);
+  background: var(--blue-dim);
+  border: 1px solid color-mix(in srgb, var(--blue) 25%, transparent);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--blue);
+}
+
 /* Tabs */
 .tabs {
   display: flex;
+  align-items: center;
+  justify-content: space-between;
   border-bottom: 1px solid var(--border);
   background: var(--surface);
   flex-shrink: 0;
-  padding: 0 16px;
+  padding: 0 12px 0 16px;
+  gap: 8px;
+}
+
+.tabsList {
+  display: flex;
+  flex: 1;
 }
 
 .tab {
@@ -191,6 +226,9 @@
   color: var(--text-3);
   transition: all 0.12s;
   margin-bottom: -1px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
 }
 
 .tab:hover { color: var(--text-2); }
@@ -198,6 +236,50 @@
 .activeTab {
   color: var(--text);
   border-bottom-color: var(--green);
+}
+
+/* Submit button inline in the tab bar (exam mode, task scenario) */
+.tabBarSubmitBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: var(--blue);
+  color: #fff;
+  border: none;
+  border-radius: 5px;
+  padding: 6px 8px;
+  font-size: 12px;
+  font-weight: 700;
+  font-family: var(--sans);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: opacity 0.15s;
+  white-space: nowrap;
+  align-self: center;
+  margin-left: 8px;
+}
+.tabBarSubmitBtn:hover:not(:disabled) { opacity: 0.85; }
+.tabBarSubmitBtn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* Already submitted — muted chip */
+.tabBarSubmittedBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: transparent;
+  color: var(--blue);
+  border: 1px solid color-mix(in srgb, var(--blue) 35%, transparent);
+  border-radius: 5px;
+  padding: 6px 8px;
+  font-size: 12px;
+  font-weight: 700;
+  font-family: var(--sans);
+  cursor: default;
+  flex-shrink: 0;
+  opacity: 0.75;
+  white-space: nowrap;
+  align-self: center;
+  margin-left: 8px;
 }
 
 /* Content */
@@ -486,6 +568,27 @@
 }
 .validateBtn:hover:not(:disabled) { opacity: 0.85; }
 .validateBtn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* Blue submit button used in exam mode instead of green validate */
+.submitExamBtn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--blue);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius);
+  padding: 9px 18px;
+  font-size: 13px;
+  font-weight: 700;
+  font-family: var(--sans);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: opacity 0.15s;
+  white-space: nowrap;
+}
+.submitExamBtn:hover:not(:disabled) { opacity: 0.85; }
+.submitExamBtn:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .checks { display: flex; flex-direction: column; gap: 6px; }
 

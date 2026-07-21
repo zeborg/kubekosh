@@ -29,6 +29,17 @@
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--tcolor, transparent) 12%, transparent);
 }
 
+.triggerDisabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  filter: grayscale(0.5);
+}
+.triggerDisabled:hover {
+  background: var(--tdim, var(--surface2));
+  border-color: color-mix(in srgb, var(--tcolor, var(--border)) 35%, transparent);
+  box-shadow: none;
+}
+
 .triggerIcon {
   font-size: 15px;
   line-height: 1;
