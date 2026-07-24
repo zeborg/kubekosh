@@ -5,7 +5,7 @@
   "difficulty": "Easy",
   "type": "task",
   "weight": 4,
-  "description": "## Waiting for Resource Conditions with `kubectl wait`\n\n`kubectl wait` blocks until a specified condition is met on a resource — essential in scripts and CI pipelines where you need to ensure resources are ready before proceeding.\n\nCommon conditions:\n- `--for=condition=Ready` — pod is Ready\n- `--for=condition=Available` — deployment has minimum available replicas\n- `--for=condition=Complete` — job has completed\n- `--for=delete` — resource has been deleted\n\n**Your task:**\n\n1. Create a Deployment named `wait-demo` with image `nginx:alpine` and 2 replicas\n2. Use `kubectl wait` to **block until the Deployment is Available** (timeout: 90 seconds)\n3. Use `kubectl wait` to block until **all pods** with label `app=wait-demo` are Ready\n4. Save the output of `kubectl get deployment wait-demo` to `/tmp/wait-result.txt` after the waits complete\n\n```bash\nkubectl wait deployment/wait-demo --for=condition=Available --timeout=90s\nkubectl wait pods -l app=wait-demo --for=condition=Ready --timeout=90s\n```",
+  "description": "## Waiting for Resource Conditions with `kubectl wait`\n\n`kubectl wait` blocks until a specified condition is met on a resource — essential in scripts and CI pipelines where you need to ensure resources are ready before proceeding.\n\nCommon conditions:\n- `--for=condition=Ready` — pod is Ready\n- `--for=condition=Available` — deployment has minimum available replicas\n- `--for=condition=Complete` — job has completed\n- `--for=delete` — resource has been deleted\n\n**Your task:**\n\n1. Create a Deployment named `wait-demo` with image `nginx:alpine` and 3 replicas\n2. Use `kubectl wait` to **block until the Deployment is Available** (timeout: 90 seconds)\n3. Use `kubectl wait` to block until **all pods** with label `app=wait-demo` are Ready\n4. Save the output of `kubectl get deployment wait-demo` to `/tmp/wait-result.txt` after the waits complete\n\n```bash\nkubectl wait deployment/wait-demo --for=condition=Available --timeout=90s\nkubectl wait pods -l app=wait-demo --for=condition=Ready --timeout=90s\n```",
   "hints": [
     {
       "title": "Create the deployment and wait",
@@ -27,7 +27,7 @@
   "validation": {
     "commands": [
       {
-        "description": "Deployment 'wait-demo' has 2 ready replicas",
+        "description": "Deployment 'wait-demo' has 3 ready replicas",
         "command": "kubectl get deployment wait-demo -o jsonpath='{.status.readyReplicas}' 2>/dev/null | grep -v '^$' || echo 0",
         "expected_output": "3",
         "match": "exact"
